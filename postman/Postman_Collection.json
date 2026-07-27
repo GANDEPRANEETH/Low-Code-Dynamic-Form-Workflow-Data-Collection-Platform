@@ -1,0 +1,384 @@
+{
+  "info": {
+    "_postman_id": "9f1d07c0-2fbe-4977-bc68-d0e53a1a0f91",
+    "name": "FormFlow Studio - Milestone 1",
+    "description": "API collection for verifying dynamic form builder schema engines, versioning, lifecycle, and public URL rendering in Milestone 1.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Forms",
+      "item": [
+        {
+          "name": "Create Form Draft",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.globals.set(\"formId\", jsonData.id);",
+                  "pm.globals.set(\"shareSlug\", jsonData.share_slug);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Customer Satisfaction Survey\",\n  \"description\": \"Feedback form for Q3 product releases.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/forms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "forms"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List All Forms",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/forms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "forms"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Form Details & Draft Fields",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/forms/{{formId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "forms",
+                "{{formId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Form Details",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Customer Satisfaction Survey\",\n  \"description\": \"Feedback form for Q3 product releases (Updated version).\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/forms/{{formId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "forms",
+                "{{formId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Form",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/forms/{{formId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "forms",
+                "{{formId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Fields",
+      "item": [
+        {
+          "name": "Add Text Field",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.globals.set(\"fieldId\", jsonData.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Full Name\",\n  \"field_type\": \"text\",\n  \"required\": true,\n  \"placeholder\": \"Enter your legal full name\",\n  \"order\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/forms/{{formId}}/fields",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "forms",
+                "{{formId}}",
+                "fields"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Dropdown Field",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"How did you hear about us?\",\n  \"field_type\": \"dropdown\",\n  \"required\": false,\n  \"placeholder\": \"Choose channel...\",\n  \"options\": [\n    \"Search Engine\",\n    \"Social Media\",\n    \"Friend / Colleague\",\n    \"Other\"\n  ],\n  \"order\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/forms/{{formId}}/fields",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "forms",
+                "{{formId}}",
+                "fields"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Rating Field",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Rate your experience\",\n  \"field_type\": \"rating\",\n  \"required\": true,\n  \"order\": 2\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/forms/{{formId}}/fields",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "forms",
+                "{{formId}}",
+                "fields"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Field Configuration",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"First & Last Name\",\n  \"placeholder\": \"E.g., John Doe\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/fields/{{fieldId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "fields",
+                "{{fieldId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Field",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/fields/{{fieldId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "fields",
+                "{{fieldId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Lifecycle",
+      "item": [
+        {
+          "name": "Publish Form",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/forms/{{formId}}/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "forms",
+                "{{formId}}",
+                "publish"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Archive Form",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/forms/{{formId}}/archive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "forms",
+                "{{formId}}",
+                "archive"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Public Client",
+      "item": [
+        {
+          "name": "Resolve Public Form by Slug",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/forms/{{shareSlug}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "forms",
+                "{{shareSlug}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    }
+  ]
+}

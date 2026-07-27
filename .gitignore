@@ -1,0 +1,16 @@
+# Local Database Cluster
+.pg_data/
+
+# Python Virtual Environment
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+
+# Node Modules and Builds
+frontend/node_modules/
+frontend/dist/
+frontend/.oxlintrc.json
+
+# IDE and OS files
+.DS_Store
+.vscode/
