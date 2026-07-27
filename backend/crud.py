@@ -1,7 +1,7 @@
 import secrets
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from . import models, schemas
+import models, schemas
 
 # Helper to generate unique URL-safe slugs
 def generate_unique_slug(db: Session) -> str:
