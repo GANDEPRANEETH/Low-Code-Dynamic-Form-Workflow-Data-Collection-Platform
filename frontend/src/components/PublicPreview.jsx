@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
-import { Star, FileUp, Globe, CheckCircle, ArrowLeft, Loader } from "lucide-react";
+import { Star, FileUp, Globe, CheckCircle, ArrowLeft, Loader, Check } from "lucide-react";
+import "../styles/preview.css";
+import "../styles/form.css";
 
-function PublicPreview({ shareSlug, isPublicOnly = false, showToast }) {
+function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [responses, setResponses] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [loadedSuccessfully, setLoadedSuccessfully] = useState(false);
 
   useEffect(() => {
     fetchPublicForm();
@@ -19,8 +22,9 @@ function PublicPreview({ shareSlug, isPublicOnly = false, showToast }) {
       setError(null);
       const data = await api.getPublicForm(shareSlug);
       setForm(data);
-      
-      // Initialize response state
+      setLoadedSuccessfully(true);
+
+      // Initialize responses
       const initialResponses = {};
       data.fields.forEach((field) => {
         if (field.field_type === "checkbox") {
@@ -33,7 +37,7 @@ function PublicPreview({ shareSlug, isPublicOnly = false, showToast }) {
       });
       setResponses(initialResponses);
     } catch (err) {
-      setError(err.message || "Failed to load public form");
+      setError(err.message || "Failed to load public form schema");
     } finally {
       setLoading(false);
     }
@@ -42,7 +46,7 @@ function PublicPreview({ shareSlug, isPublicOnly = false, showToast }) {
   const handleInputChange = (fieldId, value) => {
     setResponses({
       ...responses,
-      [fieldId]: value,
+      [fieldId]: value
     });
   };
 
@@ -59,38 +63,36 @@ function PublicPreview({ shareSlug, isPublicOnly = false, showToast }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
-    // Validate required fields
+
+    // Field requirements validation
     for (const field of form.fields) {
       const val = responses[field.id];
       if (field.required) {
         if (field.field_type === "checkbox" && (!val || val.length === 0)) {
-          showToast(`Please check at least one option for "${field.label}"`, "error");
+          showToast(`Please select at least one choice for: ${field.label}`, "error");
           return;
         }
         if (field.field_type === "rating" && !val) {
-          showToast(`Please select a rating for "${field.label}"`, "error");
+          showToast(`Please rate: ${field.label}`, "error");
           return;
         }
         if (!field.options && !val) {
-          showToast(`Please fill out: "${field.label}"`, "error");
+          showToast(`Please fill in required field: ${field.label}`, "error");
           return;
         }
       }
     }
 
     setSubmitted(true);
-    if (showToast) {
-      showToast("Form response simulated successfully!");
-    }
+    showToast("Response simulation verified!");
   };
 
   if (loading) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", backgroundColor: "var(--bg-main)" }}>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
         <div style={{ textAlign: "center" }}>
-          <Loader size={36} className="animate-spin text-indigo-500" style={{ animation: "spin 1s linear infinite", marginBottom: "1rem" }} />
-          <p className="subtitle">Retrieving form layout...</p>
+          <Loader size={32} className="animate-spin text-indigo-500" style={{ animation: "spin 1s linear infinite", marginBottom: "1rem" }} />
+          <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>Resolving form snapshot...</p>
         </div>
       </div>
     );
@@ -98,13 +100,13 @@ function PublicPreview({ shareSlug, isPublicOnly = false, showToast }) {
 
   if (error) {
     return (
-      <div className="public-form-wrapper fade-in">
+      <div className="preview-wrapper fade-in">
         <div className="glass-card" style={{ textAlign: "center", padding: "4rem 2rem", borderColor: "var(--danger)" }}>
-          <Globe size={48} style={{ color: "var(--danger)", marginBottom: "1rem" }} />
-          <h2 style={{ fontFamily: "var(--font-display)", marginBottom: "0.5rem" }}>Access Denied</h2>
-          <p className="subtitle" style={{ color: "var(--danger)", marginBottom: "2rem" }}>{error}</p>
+          <Globe size={40} style={{ color: "var(--danger)", marginBottom: "1rem" }} />
+          <h2 style={{ fontFamily: "var(--font-display)", marginBottom: "0.5rem" }}>Resolution Error</h2>
+          <p style={{ color: "var(--danger)", fontSize: "0.95rem", marginBottom: "2rem" }}>{error}</p>
           {!isPublicOnly && (
-            <button className="btn btn-secondary" onClick={() => (window.location.hash = "")}>
+            <button className="btn btn-secondary" onClick={onBack}>
               <ArrowLeft size={16} /> Return to Dashboard
             </button>
           )}
@@ -115,19 +117,19 @@ function PublicPreview({ shareSlug, isPublicOnly = false, showToast }) {
 
   if (submitted) {
     return (
-      <div className="public-form-wrapper fade-in">
-        <div className="glass-card" style={{ textAlign: "center", padding: "4rem 2rem" }}>
-          <CheckCircle size={56} style={{ color: "var(--success)", marginBottom: "1.5rem" }} />
-          <h2 style={{ fontFamily: "var(--font-display)", marginBottom: "0.5rem" }}>Thank You!</h2>
-          <p className="subtitle" style={{ marginBottom: "2rem" }}>
-            Your response simulation for "{form.title}" was completed. Layout presentation verified successfully.
+      <div className="preview-wrapper fade-in">
+        <div className="success-container">
+          <CheckCircle size={48} className="success-icon" />
+          <h2>Submission Simulated</h2>
+          <p>
+            Thank you! Your response simulation for "{form.title}" was successfully verified. Form layout rendering works correctly.
           </p>
-          <div style={{ display: "flex", justifyContent: "center", gap: "1rem" }}>
+          <div className="success-actions">
             <button className="btn btn-primary" onClick={() => setSubmitted(false)}>
-              Submit Another Response
+              Fill Out Again
             </button>
             {!isPublicOnly && (
-              <button className="btn btn-secondary" onClick={() => (window.location.hash = "")}>
+              <button className="btn btn-secondary" onClick={onBack}>
                 <ArrowLeft size={16} /> Back to Dashboard
               </button>
             )}
@@ -138,68 +140,66 @@ function PublicPreview({ shareSlug, isPublicOnly = false, showToast }) {
   }
 
   return (
-    <div className="public-form-wrapper fade-in">
-      {!isPublicOnly && (
-        <button 
-          className="btn btn-secondary" 
-          style={{ marginBottom: "1.5rem" }} 
-          onClick={() => (window.location.hash = "")}
-        >
-          <ArrowLeft size={16} /> Back to Dashboard
-        </button>
-      )}
+    <div className="preview-wrapper fade-in">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+        {!isPublicOnly ? (
+          <button className="btn btn-secondary" onClick={onBack}>
+            <ArrowLeft size={16} /> Dashboard
+          </button>
+        ) : (
+          <div></div>
+        )}
+        
+        {loadedSuccessfully && (
+          <div className="badge badge-published" style={{ display: "inline-flex", gap: "0.25rem", padding: "0.4rem 0.8rem", textTransform: "none" }}>
+            <Check size={12} /> Form Loaded Successfully
+          </div>
+        )}
+      </div>
 
       <form className="glass-card" onSubmit={handleSubmit}>
-        <div className="public-form-header">
-          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "inline-block", marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "1px" }}>
-            Published Version {form.version}
-          </span>
-          <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.75rem", fontWeight: 700 }}>
-            {form.title}
-          </h2>
-          {form.description && (
-            <p className="subtitle" style={{ marginTop: "0.5rem", fontSize: "0.95rem" }}>
-              {form.description}
-            </p>
-          )}
+        <div className="preview-header">
+          <span className="preview-header-version">Version {form.version}</span>
+          <h2>{form.title}</h2>
+          {form.description && <p>{form.description}</p>}
         </div>
 
-        <div className="public-form-body">
+        <div className="preview-body">
           {form.fields.map((field) => {
             const val = responses[field.id];
             
             return (
               <div key={field.id} className="form-group">
-                <label className="form-label" style={{ display: "flex", gap: "0.25rem", color: "var(--text-main)", marginBottom: "0.5rem" }}>
+                <label className="form-label" style={{ color: "var(--text-main)", marginBottom: "0.5rem" }}>
                   {field.label} {field.required && <span style={{ color: "var(--danger)" }}>*</span>}
                 </label>
 
                 {field.field_type === "dropdown" && (
                   <select 
-                    className="form-control" 
-                    value={val} 
+                    className="form-control"
+                    value={val}
                     onChange={(e) => handleInputChange(field.id, e.target.value)}
                     required={field.required}
                   >
                     <option value="">{field.placeholder || "Select option..."}</option>
-                    {(field.options || []).map((o, idx) => (
-                      <option key={idx} value={o}>{o}</option>
+                    {(field.options || []).map((option, idx) => (
+                      <option key={idx} value={option}>{option}</option>
                     ))}
                   </select>
                 )}
 
                 {field.field_type === "checkbox" && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.25rem" }}>
-                    {(field.options || []).map((o, idx) => {
-                      const isChecked = (val || []).includes(o);
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    {(field.options || []).map((option, idx) => {
+                      const isChecked = (val || []).includes(option);
                       return (
-                        <label key={idx} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.9rem", cursor: "pointer" }}>
+                        <label key={idx} className="checkbox-option">
                           <input 
-                            type="checkbox" 
-                            style={{ width: "16px", height: "16px" }} 
+                            type="checkbox"
                             checked={isChecked}
-                            onChange={(e) => handleCheckboxToggle(field.id, o, e.target.checked)}
-                          /> {o}
+                            onChange={(e) => handleCheckboxToggle(field.id, option, e.target.checked)}
+                          />
+                          <span>{option}</span>
                         </label>
                       );
                     })}
@@ -207,15 +207,14 @@ function PublicPreview({ shareSlug, isPublicOnly = false, showToast }) {
                 )}
 
                 {field.field_type === "rating" && (
-                  <div className="rating-container" style={{ padding: "0.25rem 0" }}>
+                  <div className="rating-container">
                     {[1, 2, 3, 4, 5].map((s) => {
                       const isFilled = s <= (val || 0);
                       return (
                         <Star 
-                          key={s} 
-                          size={24} 
-                          className={isFilled ? "star-filled" : "star-empty"} 
-                          style={{ cursor: "pointer" }}
+                          key={s}
+                          size={24}
+                          className={isFilled ? "star-filled" : "star-empty"}
                           onClick={() => handleInputChange(field.id, s)}
                         />
                       );
@@ -224,9 +223,11 @@ function PublicPreview({ shareSlug, isPublicOnly = false, showToast }) {
                 )}
 
                 {field.field_type === "file" && (
-                  <div style={{ background: "rgba(255,255,255,0.02)", padding: "1.5rem", border: "2px dashed var(--border-color)", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
-                    <FileUp size={24} style={{ color: "var(--primary)" }} />
-                    <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Drag and drop file or click to select</span>
+                  <div className="file-dropzone">
+                    <FileUp size={24} className="file-dropzone-icon" />
+                    <span className="file-dropzone-text">
+                      {field.placeholder || "Drag and drop or click to upload attachment"}
+                    </span>
                     <input 
                       type="file" 
                       style={{ display: "none" }} 
@@ -237,8 +238,8 @@ function PublicPreview({ shareSlug, isPublicOnly = false, showToast }) {
 
                 {["text", "number", "email", "date"].includes(field.field_type) && (
                   <input 
-                    type={field.field_type === "number" ? "number" : field.field_type === "date" ? "date" : "text"} 
-                    className="form-control" 
+                    type={field.field_type === "number" ? "number" : field.field_type === "date" ? "date" : "text"}
+                    className="form-control"
                     placeholder={field.placeholder || ""}
                     value={val}
                     onChange={(e) => handleInputChange(field.id, e.target.value)}
@@ -250,9 +251,9 @@ function PublicPreview({ shareSlug, isPublicOnly = false, showToast }) {
           })}
         </div>
 
-        <div style={{ marginTop: "2.5rem", display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ marginTop: "2.5rem" }}>
           <button type="submit" className="btn btn-primary" style={{ width: "100%", padding: "1rem" }}>
-            Submit Responses
+            Submit Mock Responses
           </button>
         </div>
       </form>

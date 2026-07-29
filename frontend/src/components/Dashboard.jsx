@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
-import { Plus, Edit2, Trash2, Globe, Archive, Copy, ExternalLink, Loader } from "lucide-react";
+import { Plus, Edit2, Trash2, Globe, Archive, Copy, ExternalLink, Loader, ServerCrash } from "lucide-react";
+import "../styles/dashboard.css";
+import "../styles/form.css";
 
-function FormList({ onEditForm, showToast }) {
+function Dashboard({ onEditForm, onViewPreview, showToast }) {
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -20,7 +22,7 @@ function FormList({ onEditForm, showToast }) {
       const data = await api.getForms();
       setForms(data);
     } catch (err) {
-      showToast(err.message || "Failed to load forms", "error");
+      showToast(err.message || "Failed to load forms from engine", "error");
     } finally {
       setLoading(false);
     }
@@ -43,10 +45,9 @@ function FormList({ onEditForm, showToast }) {
       setNewFormDesc("");
       setShowCreateModal(false);
       showToast("Form draft created successfully!");
-      // Automatically redirect to builder for the new form
       onEditForm(created.id);
     } catch (err) {
-      showToast(err.message || "Failed to create form", "error");
+      showToast(err.message || "Failed to create form draft", "error");
     } finally {
       setSubmitting(false);
     }
@@ -67,7 +68,7 @@ function FormList({ onEditForm, showToast }) {
     try {
       const updated = await api.publishForm(id);
       setForms(forms.map((f) => (f.id === id ? updated : f)));
-      showToast("Form published successfully! Public URL is now active.");
+      showToast("Form version published successfully! Public link is active.");
     } catch (err) {
       showToast(err.message || "Failed to publish form. Make sure to add fields first.", "error");
     }
@@ -84,97 +85,102 @@ function FormList({ onEditForm, showToast }) {
   };
 
   const copyShareLink = (shareSlug) => {
+    // Generate public URL path format /forms/{share_slug}
     const link = `${window.location.origin}/forms/${shareSlug}`;
     navigator.clipboard.writeText(link)
-      .then(() => showToast("Share URL copied to clipboard!"))
+      .then(() => showToast("Public URL copied to clipboard!"))
       .catch(() => showToast("Failed to copy URL", "error"));
   };
 
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "300px" }}>
-        <Loader size={36} className="animate-spin text-indigo-500" style={{ animation: "spin 1s linear infinite" }} />
+        <Loader size={32} className="animate-spin text-indigo-500" style={{ animation: "spin 1s linear infinite" }} />
       </div>
     );
   }
 
   return (
     <div className="fade-in">
-      <div style={{ display: "flex", justifyContent: "between", alignItems: "center", marginBottom: "2rem" }}>
-        <div>
-          <h2 style={{ fontSize: "1.5rem", fontWeight: "700" }}>Your Forms</h2>
-          <p className="subtitle">Manage, edit, publish, and track form configurations</p>
+      <div className="dashboard-header">
+        <div className="dashboard-title">
+          <h2>Your Forms</h2>
+          <p>Create, manage, and publish dynamic schemas</p>
         </div>
         <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-          <Plus size={18} /> Create Form
+          <Plus size={16} /> Create Form
         </button>
       </div>
 
       {forms.length === 0 ? (
-        <div className="glass-card" style={{ textAlign: "center", padding: "4rem 2rem" }}>
-          <Globe size={48} style={{ color: "var(--text-muted)", marginBottom: "1rem", opacity: 0.4 }} />
-          <h3>No forms created yet</h3>
-          <p className="subtitle" style={{ margin: "0.5rem 0 1.5rem" }}>Create your first dynamic form to start collecting schema configurations.</p>
+        <div className="empty-dashboard">
+          <ServerCrash size={40} className="empty-dashboard-icon" />
+          <h3>No forms configured</h3>
+          <p style={{ color: "var(--text-muted)", margin: "0.5rem 0 1.5rem", fontSize: "0.9rem" }}>
+            Add your first custom form draft to populate the workspace.
+          </p>
           <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-            <Plus size={18} /> Create Form
+            <Plus size={16} /> Create Form
           </button>
         </div>
       ) : (
         <div className="forms-grid">
           {forms.map((form) => {
-            const isDraft = !form.is_published && !form.is_archived;
+            const isDraft = form.status === "Draft";
+            const isPublished = form.status === "Published";
+            const isArchived = form.status === "Archived";
+            
+            // Version display: if published, show current_version - 1 (since current_version represents next draft version)
+            const displayVersion = isPublished ? form.current_version - 1 : form.current_version;
+
             return (
               <div key={form.id} className="glass-card form-card">
-                <div className="form-card-header">
+                <div className="form-card-top">
                   <div>
-                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                      v{form.is_published ? form.current_version - 1 : form.current_version}
-                    </span>
+                    <span className="form-card-version">v{displayVersion}</span>
                     <h3 className="form-card-title" title={form.title}>{form.title}</h3>
                   </div>
                   {isDraft && <span className="badge badge-draft">Draft</span>}
-                  {form.is_published && <span className="badge badge-published">Published</span>}
-                  {form.is_archived && <span className="badge badge-archived">Archived</span>}
+                  {isPublished && <span className="badge badge-published">Published</span>}
+                  {isArchived && <span className="badge badge-archived">Archived</span>}
                 </div>
 
                 <p className="form-card-desc">
                   {form.description || "No description provided."}
                 </p>
 
-                <div className="form-card-footer">
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                <div className="form-card-actions">
+                  <div className="action-group">
                     <button 
                       className="btn btn-secondary btn-icon" 
                       onClick={() => onEditForm(form.id)}
-                      title="Edit Form Layout"
+                      title="Edit Form"
                     >
-                      <Edit2 size={15} />
+                      <Edit2 size={14} />
                     </button>
-                    {form.is_published ? (
+                    {isPublished ? (
                       <>
                         <button 
                           className="btn btn-secondary btn-icon" 
                           onClick={() => copyShareLink(form.share_slug)}
-                          title="Copy Share Link"
+                          title="Copy Public URL"
                         >
-                          <Copy size={15} />
+                          <Copy size={14} />
                         </button>
-                        <a 
-                          href={`/forms/${form.share_slug}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn btn-secondary btn-icon"
+                        <button 
+                          className="btn btn-secondary btn-icon" 
+                          onClick={() => onViewPreview(form.share_slug)}
                           title="Open Public Preview"
                         >
-                          <ExternalLink size={15} />
-                        </a>
+                          <ExternalLink size={14} />
+                        </button>
                         <button 
-                          className="btn btn-secondary btn-icon"
+                          className="btn btn-secondary btn-icon" 
                           style={{ color: "var(--warning)" }}
                           onClick={() => handleArchiveForm(form.id)}
                           title="Archive Form"
                         >
-                          <Archive size={15} />
+                          <Archive size={14} />
                         </button>
                       </>
                     ) : (
@@ -184,9 +190,9 @@ function FormList({ onEditForm, showToast }) {
                           style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
                           onClick={() => handlePublishForm(form.id)}
                         >
-                          <Globe size={13} /> Publish
+                          Publish
                         </button>
-                        {form.is_archived && (
+                        {isArchived && (
                           <button 
                             className="btn btn-secondary" 
                             style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
@@ -203,7 +209,7 @@ function FormList({ onEditForm, showToast }) {
                     onClick={() => handleDeleteForm(form.id, form.title)}
                     title="Delete Form"
                   >
-                    <Trash2 size={15} />
+                    <Trash2 size={14} />
                   </button>
                 </div>
               </div>
@@ -212,10 +218,10 @@ function FormList({ onEditForm, showToast }) {
         </div>
       )}
 
-      {/* CREATE FORM MODAL */}
+      {/* CREATE FORM POPUP MODAL */}
       {showCreateModal && (
         <div className="modal-overlay">
-          <div className="modal-content fade-in" style={{ maxWidth: "500px" }}>
+          <div className="modal-content fade-in">
             <div className="modal-header">
               <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>New Form Draft</h3>
               <button 
@@ -232,7 +238,7 @@ function FormList({ onEditForm, showToast }) {
                 <input 
                   type="text" 
                   className="form-control" 
-                  placeholder="E.g., Customer Feedback Form"
+                  placeholder="E.g., Event Registration"
                   value={newFormTitle}
                   onChange={(e) => setNewFormTitle(e.target.value)}
                   required
@@ -242,7 +248,7 @@ function FormList({ onEditForm, showToast }) {
                 <label className="form-label">Description (Optional)</label>
                 <textarea 
                   className="form-control" 
-                  placeholder="Provide details about this form..."
+                  placeholder="Describe the purpose of this form schema..."
                   rows="3"
                   value={newFormDesc}
                   onChange={(e) => setNewFormDesc(e.target.value)}
@@ -273,4 +279,4 @@ function FormList({ onEditForm, showToast }) {
   );
 }
 
-export default FormList;
+export default Dashboard;

@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "9f1d07c0-2fbe-4977-bc68-d0e53a1a0f91",
-    "name": "FormFlow Studio - Milestone 1",
-    "description": "API collection for verifying dynamic form builder schema engines, versioning, lifecycle, and public URL rendering in Milestone 1.",
+    "name": "FormFlow Studio - Django REST Framework",
+    "description": "API collection for verifying Django REST Framework dynamic form builder schema engines, versioning, lifecycle, and public URL rendering.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -179,7 +179,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"label\": \"Full Name\",\n  \"field_type\": \"text\",\n  \"required\": true,\n  \"placeholder\": \"Enter your legal full name\",\n  \"order\": 0\n}"
+              "raw": "{\n  \"label\": \"Full Name\",\n  \"field_type\": \"text\",\n  \"required\": true,\n  \"placeholder\": \"Enter your legal full name\",\n  \"display_order\": 0\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/forms/{{formId}}/fields",
@@ -208,7 +208,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"label\": \"How did you hear about us?\",\n  \"field_type\": \"dropdown\",\n  \"required\": false,\n  \"placeholder\": \"Choose channel...\",\n  \"options\": [\n    \"Search Engine\",\n    \"Social Media\",\n    \"Friend / Colleague\",\n    \"Other\"\n  ],\n  \"order\": 1\n}"
+              "raw": "{\n  \"label\": \"How did you hear about us?\",\n  \"field_type\": \"dropdown\",\n  \"required\": false,\n  \"placeholder\": \"Choose channel...\",\n  \"options\": [\n    \"Search Engine\",\n    \"Social Media\",\n    \"Friend / Colleague\",\n    \"Other\"\n  ],\n  \"display_order\": 1\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/forms/{{formId}}/fields",
@@ -237,7 +237,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"label\": \"Rate your experience\",\n  \"field_type\": \"rating\",\n  \"required\": true,\n  \"order\": 2\n}"
+              "raw": "{\n  \"label\": \"Rate your experience\",\n  \"field_type\": \"rating\",\n  \"required\": true,\n  \"display_order\": 2,\n  \"validation_rules\": {\n    \"min_value\": 1,\n    \"max_value\": 5\n  }\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/forms/{{formId}}/fields",
@@ -357,14 +357,13 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/public/forms/{{shareSlug}}",
+              "raw": "{{baseUrl}}/api/public/{{shareSlug}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "public",
-                "forms",
                 "{{shareSlug}}"
               ]
             }

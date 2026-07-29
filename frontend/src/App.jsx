@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import FormList from "./components/FormList";
-import FormBuilder from "./components/FormBuilder";
-import PublicPreview from "./components/PublicPreview";
-import { Layers } from "lucide-react";
+import Navbar from "./components/Navbar";
+import Home from "./pages/Home";
+import Builder from "./pages/Builder";
+import Preview from "./pages/Preview";
 
 function App() {
   const [route, setRoute] = useState(getRouteFromLocation());
@@ -31,7 +31,11 @@ function App() {
       const id = hash.split("#/builder/")[1];
       return { type: "builder", id };
     }
-    return { type: "dashboard" };
+    if (hash.startsWith("#/preview/")) {
+      const slug = hash.split("#/preview/")[1];
+      return { type: "preview", slug };
+    }
+    return { type: "home" };
   }
 
   const showToast = (message, type = "success") => {
@@ -41,11 +45,15 @@ function App() {
     }, 3000);
   };
 
-  // If public responder URL is active, bypass standard admin headers
+  const handleBackToDashboard = () => {
+    window.location.hash = "";
+  };
+
+  // If public responder URL is active, bypass standard admin navbar
   if (route.type === "public") {
     return (
       <div className="fade-in">
-        <PublicPreview shareSlug={route.slug} isPublicOnly={true} showToast={showToast} />
+        <Preview shareSlug={route.slug} isPublicOnly={true} showToast={showToast} />
         {toast && (
           <div className="toast" style={{ borderLeftColor: toast.type === "error" ? "var(--danger)" : "var(--primary)" }}>
             {toast.message}
@@ -57,30 +65,29 @@ function App() {
 
   return (
     <div className="app-container fade-in">
-      <header>
-        <div className="logo-container" style={{ cursor: "pointer" }} onClick={() => (window.location.hash = "")}>
-          <div className="logo-icon">
-            <Layers size={22} className="text-white" />
-          </div>
-          <div>
-            <h1>FormFlow Studio</h1>
-            <div className="subtitle">Low-Code Form Builder Engine</div>
-          </div>
-        </div>
-      </header>
+      <Navbar onLogoClick={handleBackToDashboard} />
 
-      <main>
-        {route.type === "dashboard" && (
-          <FormList 
-            onEditForm={(id) => (window.location.hash = `#/builder/${id}`)} 
-            showToast={showToast} 
+      <main style={{ padding: "0 2rem 2rem" }}>
+        {route.type === "home" && (
+          <Home 
+            onEditForm={(id) => (window.location.hash = `#/builder/${id}`)}
+            onViewPreview={(slug) => (window.location.hash = `#/preview/${slug}`)}
+            showToast={showToast}
           />
         )}
         {route.type === "builder" && (
-          <FormBuilder 
-            formId={route.id} 
-            onBack={() => (window.location.hash = "")} 
-            showToast={showToast} 
+          <Builder 
+            formId={route.id}
+            onBack={handleBackToDashboard}
+            showToast={showToast}
+          />
+        )}
+        {route.type === "preview" && (
+          <Preview 
+            shareSlug={route.slug}
+            isPublicOnly={false}
+            onBack={handleBackToDashboard}
+            showToast={showToast}
           />
         )}
       </main>

@@ -41,5 +41,5 @@ export const api = {
   archiveForm: (id) => request(`/api/forms/${id}/archive`, { method: "POST" }),
   
   // Public Client
-  getPublicForm: (slug) => request(`/api/public/forms/${slug}`),
+  getPublicForm: (slug) => request(`/api/public/${slug}`),
 };
