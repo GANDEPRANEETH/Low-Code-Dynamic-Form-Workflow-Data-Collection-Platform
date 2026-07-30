@@ -39,9 +39,9 @@ urlpatterns = [
     path('api/forms/<int:form_id>/archive', builder_views.archive_form),
     
     # Public Resolution & Submission
+    path('api/public/upload', public_views.upload_file),
     path('api/public/<str:share_slug>', public_views.get_public_form),
     path('api/public/<str:share_slug>/submit', public_views.submit_response),
-    path('api/public/upload', public_views.upload_file),
 ]
 
 # Serve media files in development mode
