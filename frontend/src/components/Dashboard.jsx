@@ -96,7 +96,8 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
   };
 
   const copyShareLink = (shareSlug) => {
-    const link = `${window.location.origin}/forms/${shareSlug}`;
+    const base = import.meta.env.VITE_PUBLIC_URL || window.location.origin;
+    const link = `${base}/forms/${shareSlug}`;
     navigator.clipboard.writeText(link)
       .then(() => showToast("Public URL copied to clipboard!"))
       .catch(() => showToast("Failed to copy URL", "error"));
