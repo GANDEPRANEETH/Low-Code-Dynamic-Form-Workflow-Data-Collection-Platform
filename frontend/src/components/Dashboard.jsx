@@ -1,12 +1,23 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
-import { Plus, Edit2, Trash2, Globe, Archive, Copy, ExternalLink, Loader, ServerCrash } from "lucide-react";
+import { 
+  Plus, Edit2, Trash2, Globe, Archive, Copy, ExternalLink, Loader, 
+  ServerCrash, MessageSquare, ArrowLeft, Download, Eye, Star, FileUp
+} from "lucide-react";
 import "../styles/dashboard.css";
 import "../styles/form.css";
 
 function Dashboard({ onEditForm, onViewPreview, showToast }) {
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Responses Dashboard State
+  const [viewingResponsesFor, setViewingResponsesFor] = useState(null);
+  const [responses, setResponses] = useState([]);
+  const [loadingResponses, setLoadingResponses] = useState(false);
+  const [selectedResponse, setSelectedResponse] = useState(null);
+
+  // Create Form Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newFormTitle, setNewFormTitle] = useState("");
   const [newFormDesc, setNewFormDesc] = useState("");
@@ -85,11 +96,73 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
   };
 
   const copyShareLink = (shareSlug) => {
-    // Generate public URL path format /forms/{share_slug}
-    const link = `${window.location.origin}/forms/${shareSlug}`;
+    const base = import.meta.env.VITE_PUBLIC_URL || window.location.origin;
+    const link = `${base}/forms/${shareSlug}`;
     navigator.clipboard.writeText(link)
       .then(() => showToast("Public URL copied to clipboard!"))
       .catch(() => showToast("Failed to copy URL", "error"));
+  };
+
+  // Submissions Dashboard Logic
+  const handleViewResponses = async (formObj) => {
+    setViewingResponsesFor(formObj);
+    setSelectedResponse(null);
+    try {
+      setLoadingResponses(true);
+      const data = await api.getResponses(formObj.id);
+      setResponses(data);
+    } catch (err) {
+      showToast(err.message || "Failed to load form responses", "error");
+    } finally {
+      setLoadingResponses(false);
+    }
+  };
+
+  const handleExportCSV = (formId) => {
+    const csvUrl = api.exportCSVUrl(formId);
+    // Open in a new tab to trigger native HTTP attachment download
+    window.open(csvUrl, "_blank");
+    showToast("CSV Export triggered");
+  };
+
+  const getFieldLabel = (fieldId) => {
+    if (!viewingResponsesFor) return `Field #${fieldId}`;
+    const f = viewingResponsesFor.fields?.find(x => String(x.id) === String(fieldId));
+    return f ? f.label : `Field #${fieldId}`;
+  };
+
+  const getFieldType = (fieldId) => {
+    if (!viewingResponsesFor) return "text";
+    const f = viewingResponsesFor.fields?.find(x => String(x.id) === String(fieldId));
+    return f ? f.field_type : "text";
+  };
+
+  // Helper to format values in the submissions view
+  const renderResponseValue = (fieldId, val) => {
+    const type = getFieldType(fieldId);
+    if (type === "rating") {
+      const starsCount = Number(val) || 0;
+      return "⭐".repeat(starsCount) || "No Rating";
+    }
+    if (type === "file" && val && (val.startsWith("http://") || val.startsWith("https://"))) {
+      // Clean up UUID prefixes if visible
+      const displayFilename = val.split("/").pop().replace(/^[a-f0-9]{32}_/, "");
+      return (
+        <a 
+          href={val} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          style={{ color: "var(--primary)", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+          onClick={(e) => e.stopPropagation()} // Prevent row click
+        >
+          <FileUp size={12} /> {displayFilename}
+        </a>
+      );
+    }
+    if (Array.isArray(val)) {
+      return val.join(", ");
+    }
+    return String(val || "N/A");
   };
 
   if (loading) {
@@ -100,6 +173,159 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
     );
   }
 
+  // --- RENDERING SUBMISSIONS SUBVIEW ---
+  if (viewingResponsesFor) {
+    return (
+      <div className="fade-in">
+        <div className="dashboard-header" style={{ marginBottom: "1.5rem" }}>
+          <div className="dashboard-title">
+            <button 
+              className="btn btn-secondary" 
+              style={{ padding: "0.4rem 0.8rem", marginBottom: "0.75rem", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+              onClick={() => setViewingResponsesFor(null)}
+            >
+              <ArrowLeft size={14} /> Back to Forms
+            </button>
+            <h2>Submissions for "{viewingResponsesFor.title}"</h2>
+            <p>Analyze response metrics and export submission spreadsheets</p>
+          </div>
+          
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end" }}>
+            <button 
+              className="btn btn-primary" 
+              style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
+              onClick={() => handleExportCSV(viewingResponsesFor.id)}
+              disabled={responses.length === 0}
+            >
+              <Download size={14} /> Export CSV
+            </button>
+          </div>
+        </div>
+
+        <div className="stats-panel" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+          <div className="glass-card" style={{ padding: "1.25rem", textAlign: "center" }}>
+            <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Total Responses</div>
+            <div style={{ fontSize: "2rem", fontWeight: "700", color: "var(--primary)", marginTop: "0.25rem" }}>
+              {responses.length}
+            </div>
+          </div>
+          <div className="glass-card" style={{ padding: "1.25rem", textAlign: "center" }}>
+            <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Form Status</div>
+            <div style={{ fontSize: "1.2rem", fontWeight: "700", marginTop: "0.5rem" }}>
+              <span className={`badge badge-${viewingResponsesFor.status.toLowerCase()}`}>
+                {viewingResponsesFor.status}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {loadingResponses ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: "3rem" }}>
+            <Loader size={24} className="animate-spin text-indigo-500" style={{ animation: "spin 1s linear infinite" }} />
+          </div>
+        ) : responses.length === 0 ? (
+          <div className="empty-dashboard" style={{ padding: "3rem 1.5rem" }}>
+            <MessageSquare size={36} style={{ opacity: 0.3, marginBottom: "0.5rem" }} />
+            <h3>No responses logged yet</h3>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+              Share your public URL to start gathering dynamic submissions.
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: selectedResponse ? "1.5fr 1fr" : "1fr", gap: "1.5rem", alignItems: "start" }}>
+            
+            {/* SUBMITTED USERS LIST TABLE */}
+            <div className="glass-card" style={{ padding: "1rem", overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
+                    <th style={{ padding: "0.75rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>Name</th>
+                    <th style={{ padding: "0.75rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>Email</th>
+                    <th style={{ padding: "0.75rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>Submission Time</th>
+                    <th style={{ padding: "0.75rem", textAlign: "right" }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {responses.map((resp) => {
+                    const isSelected = selectedResponse && selectedResponse.id === resp.id;
+                    return (
+                      <tr 
+                        key={resp.id} 
+                        style={{ 
+                          borderBottom: "1px solid var(--border-color)", 
+                          cursor: "pointer",
+                          backgroundColor: isSelected ? "rgba(79, 70, 229, 0.08)" : "transparent"
+                        }}
+                        onClick={() => setSelectedResponse(resp)}
+                      >
+                        <td style={{ padding: "0.85rem 0.75rem", fontWeight: "600", color: "var(--text-main)" }}>{resp.name}</td>
+                        <td style={{ padding: "0.85rem 0.75rem", color: "var(--text-main)" }}>{resp.email}</td>
+                        <td style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                          {new Date(resp.submitted_at).toLocaleString()}
+                        </td>
+                        <td style={{ padding: "0.85rem 0.75rem", textAlign: "right" }}>
+                          <button className="btn btn-secondary" style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}>
+                            View Details
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* DETAILS PANEL DRAWER */}
+            {selectedResponse && (
+              <div className="glass-card fade-in" style={{ padding: "1.25rem", borderLeft: "3px solid var(--primary)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
+                  <h4 style={{ fontFamily: "var(--font-display)", fontWeight: "700" }}>Submission Details</h4>
+                  <button 
+                    className="btn btn-secondary btn-icon" 
+                    style={{ width: "24px", height: "24px", padding: 0 }}
+                    onClick={() => setSelectedResponse(null)}
+                  >
+                    &times;
+                  </button>
+                </div>
+                
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                  <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                    Submitted: {new Date(selectedResponse.submitted_at).toLocaleString()} (v{selectedResponse.version})
+                  </div>
+                  
+                  <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "0.75rem" }}>
+                    <div style={{ fontWeight: "600", fontSize: "0.9rem", color: "var(--text-main)" }}>Submitter Info</div>
+                    <div style={{ marginTop: "0.25rem", fontSize: "0.85rem" }}>
+                      <strong>Name:</strong> {selectedResponse.name}<br/>
+                      <strong>Email:</strong> {selectedResponse.email}
+                    </div>
+                  </div>
+
+                  <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "0.75rem" }}>
+                    <div style={{ fontWeight: "600", fontSize: "0.9rem", color: "var(--text-main)", marginBottom: "0.5rem" }}>Response Breakdown</div>
+                    {Object.entries(selectedResponse.submitted_data).map(([fieldId, value]) => (
+                      <div key={fieldId} style={{ marginBottom: "0.75rem" }}>
+                        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                          {getFieldLabel(fieldId)}
+                        </div>
+                        <div style={{ fontSize: "0.9rem", fontWeight: "500", marginTop: "0.1rem", color: "var(--text-main)" }}>
+                          {renderResponseValue(fieldId, value)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // --- MAIN DASHBOARD VIEW ---
   return (
     <div className="fade-in">
       <div className="dashboard-header">
@@ -129,8 +355,6 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
             const isDraft = form.status === "Draft";
             const isPublished = form.status === "Published";
             const isArchived = form.status === "Archived";
-            
-            // Version display: if published, show current_version - 1 (since current_version represents next draft version)
             const displayVersion = isPublished ? form.current_version - 1 : form.current_version;
 
             return (
@@ -176,6 +400,14 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
                         </button>
                         <button 
                           className="btn btn-secondary btn-icon" 
+                          style={{ color: "var(--primary)" }}
+                          onClick={() => handleViewResponses(form)}
+                          title="View Submissions"
+                        >
+                          <MessageSquare size={14} />
+                        </button>
+                        <button 
+                          className="btn btn-secondary btn-icon" 
                           style={{ color: "var(--warning)" }}
                           onClick={() => handleArchiveForm(form.id)}
                           title="Archive Form"
@@ -193,13 +425,23 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
                           Publish
                         </button>
                         {isArchived && (
-                          <button 
-                            className="btn btn-secondary" 
-                            style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
-                            onClick={() => handlePublishForm(form.id)}
-                          >
-                            Re-Publish
-                          </button>
+                          <>
+                            <button 
+                              className="btn btn-secondary btn-icon" 
+                              style={{ color: "var(--primary)" }}
+                              onClick={() => handleViewResponses(form)}
+                              title="View Submissions"
+                            >
+                              <MessageSquare size={14} />
+                            </button>
+                            <button 
+                              className="btn btn-secondary" 
+                              style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
+                              onClick={() => handlePublishForm(form.id)}
+                            >
+                              Re-Publish
+                            </button>
+                          </>
                         )}
                       </>
                     )}

@@ -1,8 +1,26 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Trash2 } from "lucide-react";
 import "../styles/form.css";
 
 function FieldSettings({ field, onUpdate, showToast }) {
+  const [localLabel, setLocalLabel] = useState("");
+  const [localPlaceholder, setLocalPlaceholder] = useState("");
+  const [localMin, setLocalMin] = useState("");
+  const [localMax, setLocalMax] = useState("");
+  const [localOptions, setLocalOptions] = useState([]);
+
+  // Sync inputs only when the active field ID changes
+  useEffect(() => {
+    if (field) {
+      setLocalLabel(field.label || "");
+      setLocalPlaceholder(field.placeholder || "");
+      const rules = field.validation_rules || {};
+      setLocalMin(rules.min_value !== undefined && rules.min_value !== null ? rules.min_value : "");
+      setLocalMax(rules.max_value !== undefined && rules.max_value !== null ? rules.max_value : "");
+      setLocalOptions(field.options || []);
+    }
+  }, [field?.id]);
+
   if (!field) {
     return (
       <div style={{ textAlign: "center", padding: "2rem 0" }}>
@@ -13,42 +31,61 @@ function FieldSettings({ field, onUpdate, showToast }) {
     );
   }
 
-  const handlePropertyChange = (key, value) => {
-    onUpdate(field.id, { [key]: value });
+  // Save textual properties on blur to avoid network lag while typing
+  const handleLabelBlur = () => {
+    if (localLabel.trim() !== (field.label || "")) {
+      onUpdate(field.id, { label: localLabel.trim() });
+    }
   };
 
-  const handleValidationChange = (ruleKey, value) => {
+  const handlePlaceholderBlur = () => {
+    if (localPlaceholder !== (field.placeholder || "")) {
+      onUpdate(field.id, { placeholder: localPlaceholder });
+    }
+  };
+
+  const handleValidationBlur = () => {
     const currentRules = field.validation_rules || {};
-    const updatedRules = {
-      ...currentRules,
-      [ruleKey]: value === "" ? null : Number(value)
-    };
-    onUpdate(field.id, { validation_rules: updatedRules });
+    const minVal = localMin === "" ? null : Number(localMin);
+    const maxVal = localMax === "" ? null : Number(localMax);
+
+    if (minVal !== currentRules.min_value || maxVal !== currentRules.max_value) {
+      onUpdate(field.id, {
+        validation_rules: {
+          ...currentRules,
+          min_value: minVal,
+          max_value: maxVal
+        }
+      });
+    }
   };
 
-  // Choice Options Helpers
-  const handleAddOption = () => {
-    const currentOptions = field.options || [];
-    const updated = [...currentOptions, `Option ${currentOptions.length + 1}`];
-    handlePropertyChange("options", updated);
-  };
-
-  const handleUpdateOption = (index, value) => {
-    const updated = [...field.options];
+  // Choice Options updates
+  const handleLocalOptionChange = (index, value) => {
+    const updated = [...localOptions];
     updated[index] = value;
-    handlePropertyChange("options", updated);
+    setLocalOptions(updated);
+  };
+
+  const handleOptionBlur = () => {
+    onUpdate(field.id, { options: localOptions });
+  };
+
+  const handleAddOption = () => {
+    const updated = [...localOptions, `Option ${localOptions.length + 1}`];
+    setLocalOptions(updated);
+    onUpdate(field.id, { options: updated });
   };
 
   const handleDeleteOption = (index) => {
-    if (field.options.length <= 1) {
+    if (localOptions.length <= 1) {
       showToast("Fields must contain at least one option", "error");
       return;
     }
-    const updated = field.options.filter((_, idx) => idx !== index);
-    handlePropertyChange("options", updated);
+    const updated = localOptions.filter((_, idx) => idx !== index);
+    setLocalOptions(updated);
+    onUpdate(field.id, { options: updated });
   };
-
-  const rules = field.validation_rules || {};
 
   return (
     <div className="fade-in">
@@ -57,8 +94,9 @@ function FieldSettings({ field, onUpdate, showToast }) {
         <input 
           type="text" 
           className="form-control" 
-          value={field.label || ""}
-          onChange={(e) => handlePropertyChange("label", e.target.value)}
+          value={localLabel}
+          onChange={(e) => setLocalLabel(e.target.value)}
+          onBlur={handleLabelBlur}
           placeholder="E.g., What is your age?"
         />
       </div>
@@ -69,14 +107,16 @@ function FieldSettings({ field, onUpdate, showToast }) {
           <input 
             type="text" 
             className="form-control" 
-            value={field.placeholder || ""}
-            onChange={(e) => handlePropertyChange("placeholder", e.target.value)}
+            value={localPlaceholder}
+            onChange={(e) => setLocalPlaceholder(e.target.value)}
+            onBlur={handlePlaceholderBlur}
             placeholder="E.g., Choose framework..."
           />
         </div>
       )}
 
-      <div className="toggle-group" onClick={() => handlePropertyChange("required", !field.required)}>
+      {/* Immediate save on checkbox click since there's no typing layout */}
+      <div className="toggle-group" onClick={() => onUpdate(field.id, { required: !field.required })}>
         <input 
           type="checkbox" 
           checked={field.required || false}
@@ -96,8 +136,9 @@ function FieldSettings({ field, onUpdate, showToast }) {
               <input 
                 type="number" 
                 className="form-control"
-                value={rules.min_value !== undefined && rules.min_value !== null ? rules.min_value : ""}
-                onChange={(e) => handleValidationChange("min_value", e.target.value)}
+                value={localMin}
+                onChange={(e) => setLocalMin(e.target.value)}
+                onBlur={handleValidationBlur}
                 placeholder="None"
               />
             </div>
@@ -106,8 +147,9 @@ function FieldSettings({ field, onUpdate, showToast }) {
               <input 
                 type="number" 
                 className="form-control"
-                value={rules.max_value !== undefined && rules.max_value !== null ? rules.max_value : ""}
-                onChange={(e) => handleValidationChange("max_value", e.target.value)}
+                value={localMax}
+                onChange={(e) => setLocalMax(e.target.value)}
+                onBlur={handleValidationBlur}
                 placeholder="None"
               />
             </div>
@@ -119,13 +161,14 @@ function FieldSettings({ field, onUpdate, showToast }) {
       {["dropdown", "checkbox"].includes(field.field_type) && (
         <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "1rem", marginTop: "1rem" }}>
           <label className="form-label" style={{ marginBottom: "0.75rem" }}>Choices Options</label>
-          {(field.options || []).map((option, idx) => (
+          {localOptions.map((option, idx) => (
             <div key={idx} className="option-edit-row">
               <input 
                 type="text" 
                 className="form-control" 
                 value={option}
-                onChange={(e) => handleUpdateOption(idx, e.target.value)}
+                onChange={(e) => handleLocalOptionChange(idx, e.target.value)}
+                onBlur={handleOptionBlur}
               />
               <button 
                 type="button" 

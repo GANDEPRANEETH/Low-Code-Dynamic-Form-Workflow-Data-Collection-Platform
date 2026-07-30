@@ -1,14 +1,23 @@
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import AllowAny
 from django.shortcuts import get_object_or_404
 from forms.models import Form, Field, FormVersion
 from forms.serializers import FormSerializer, FieldSerializer
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def add_field(request, form_id):
     form_obj = get_object_or_404(Form, id=form_id)
     
+    # Enforce: Only authenticated users can edit fields of published forms
+    if form_obj.status == 'Published' and not request.user.is_authenticated:
+        return Response(
+            {"detail": "Authentication is required to edit fields of published forms."},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
     # Auto-assign order if not set
     data = request.data.copy()
     if 'display_order' not in data or data['display_order'] is None:
@@ -21,23 +30,39 @@ def add_field(request, form_id):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-@api_view(['PUT'])
-def update_field(request, field_id):
+@api_view(['PUT', 'DELETE'])
+@permission_classes([AllowAny])
+def field_detail(request, field_id):
     field_obj = get_object_or_404(Field, id=field_id)
-    serializer = FieldSerializer(field_obj, data=request.data, partial=True)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    form_obj = field_obj.form
+    
+    # Enforce: Only authenticated users can edit fields of published forms
+    if form_obj.status == 'Published' and not request.user.is_authenticated:
+        return Response(
+            {"detail": "Authentication is required to edit fields of published forms."},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
 
-@api_view(['DELETE'])
-def delete_field(request, field_id):
-    field_obj = get_object_or_404(Field, id=field_id)
-    field_obj.delete()
-    return Response(status=status.HTTP_204_NO_CONTENT)
+    if request.method == 'PUT':
+        serializer = FieldSerializer(field_obj, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    elif request.method == 'DELETE':
+        field_obj.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 @api_view(['POST'])
+@permission_classes([AllowAny]) # We handle check inline to display user login modal on frontend
 def publish_form(request, form_id):
+    if not request.user.is_authenticated:
+        return Response(
+            {"detail": "Authentication is required to publish forms."},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
     form_obj = get_object_or_404(Form, id=form_id)
     
     # Check if form has fields to publish
@@ -72,6 +97,7 @@ def publish_form(request, form_id):
 
     # Update form state
     form_obj.status = 'Published'
+    form_obj.owner = request.user  # Set form owner
     form_obj.current_version += 1
     form_obj.save()
 
@@ -79,7 +105,14 @@ def publish_form(request, form_id):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def archive_form(request, form_id):
+    if not request.user.is_authenticated:
+        return Response(
+            {"detail": "Authentication is required to archive forms."},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
     form_obj = get_object_or_404(Form, id=form_id)
     
     # Update state to archived
