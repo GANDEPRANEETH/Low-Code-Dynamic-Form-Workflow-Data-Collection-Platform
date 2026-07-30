@@ -6,6 +6,12 @@ async function request(url, options = {}) {
     ...options.headers,
   };
 
+  // Add Authorization token if present
+  const token = localStorage.getItem("token");
+  if (token) {
+    headers["Authorization"] = `Token ${token}`;
+  }
+
   const response = await fetch(`${API_BASE}${url}`, {
     ...options,
     headers,
@@ -24,6 +30,11 @@ async function request(url, options = {}) {
 }
 
 export const api = {
+  // Auth APIs
+  register: (data) => request("/api/auth/register", { method: "POST", body: JSON.stringify(data) }),
+  login: (data) => request("/api/auth/login", { method: "POST", body: JSON.stringify(data) }),
+  getMe: () => request("/api/auth/me"),
+  
   // Forms
   getForms: () => request("/api/forms"),
   getForm: (id) => request(`/api/forms/${id}`),
@@ -40,6 +51,28 @@ export const api = {
   publishForm: (id) => request(`/api/forms/${id}/publish`, { method: "POST" }),
   archiveForm: (id) => request(`/api/forms/${id}/archive`, { method: "POST" }),
   
+  // Responses Submissions
+  getResponses: (formId) => request(`/api/forms/${formId}/responses`),
+  exportCSVUrl: (formId) => `${API_BASE}/api/forms/${formId}/export`,
+
   // Public Client
   getPublicForm: (slug) => request(`/api/public/${slug}`),
+  submitResponse: (slug, data) => request(`/api/public/${slug}/submit`, { method: "POST", body: JSON.stringify({ submitted_data: data }) }),
+  
+  // Direct file upload using native fetch (since request uses JSON content-type)
+  uploadFile: (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return fetch(`${API_BASE}/api/public/upload`, {
+      method: "POST",
+      body: formData
+    }).then(res => {
+      if (!res.ok) {
+        return res.json().then(e => {
+          throw new Error(e.detail || "Upload failed");
+        });
+      }
+      return res.json();
+    });
+  }
 };

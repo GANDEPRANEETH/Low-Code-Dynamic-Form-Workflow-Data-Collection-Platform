@@ -31,6 +31,14 @@ function FormBuilder({ formId, onBack, showToast }) {
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
 
+  // Auth modal state for publishing
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState("login"); // "login" or "register"
+  const [authUsername, setAuthUsername] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+
   useEffect(() => {
     fetchFormDetails();
   }, [formId]);
@@ -150,12 +158,66 @@ function FormBuilder({ formId, onBack, showToast }) {
       showToast("Cannot publish an empty form. Please add fields first.", "error");
       return;
     }
+
+    if (!localStorage.getItem("token")) {
+      setAuthMode("login");
+      setShowAuthModal(true);
+      return;
+    }
+
     try {
       const updated = await api.publishForm(formId);
       setForm(updated);
       showToast("Form version published successfully! Public link is active.");
     } catch (err) {
       showToast(err.message || "Failed to publish form version", "error");
+    }
+  };
+
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    if (!authUsername.trim() || !authPassword.trim()) {
+      showToast("Username and password are required", "error");
+      return;
+    }
+    if (authMode === "register" && !authEmail.trim()) {
+      showToast("Email address is required", "error");
+      return;
+    }
+
+    try {
+      setAuthSubmitting(true);
+      let response;
+      if (authMode === "login") {
+        response = await api.login({
+          username: authUsername.trim(),
+          password: authPassword.trim()
+        });
+      } else {
+        response = await api.register({
+          username: authUsername.trim(),
+          email: authEmail.trim(),
+          password: authPassword.trim()
+        });
+      }
+
+      localStorage.setItem("token", response.token);
+      localStorage.setItem("username", response.user.username);
+      setShowAuthModal(false);
+      showToast(authMode === "login" ? "Signed in successfully!" : "Account registered successfully!");
+
+      setAuthUsername("");
+      setAuthEmail("");
+      setAuthPassword("");
+
+      // Automatically continue publishing
+      const updated = await api.publishForm(formId);
+      setForm(updated);
+      showToast("Form version published successfully! Public link is active.");
+    } catch (err) {
+      showToast(err.message || "Authentication failed. Please verify credentials.", "error");
+    } finally {
+      setAuthSubmitting(false);
     }
   };
 
@@ -371,6 +433,99 @@ function FormBuilder({ formId, onBack, showToast }) {
                 Close Preview
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* AUTHENTICATION POPUP MODAL */}
+      {showAuthModal && (
+        <div className="modal-overlay">
+          <div className="modal-content fade-in" style={{ maxWidth: "400px" }}>
+            <div className="modal-header">
+              <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>
+                {authMode === "login" ? "Sign In to Publish" : "Register to Publish"}
+              </h3>
+              <button 
+                className="btn btn-secondary btn-icon" 
+                style={{ borderRadius: "50%", width: "30px", height: "30px" }}
+                onClick={() => setShowAuthModal(false)}
+              >
+                &times;
+              </button>
+            </div>
+            
+            <form onSubmit={handleAuthSubmit}>
+              <div className="form-group">
+                <label className="form-label">Username</label>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  value={authUsername}
+                  onChange={(e) => setAuthUsername(e.target.value)}
+                  placeholder="E.g., formbuilder_user"
+                  required
+                />
+              </div>
+
+              {authMode === "register" && (
+                <div className="form-group">
+                  <label className="form-label">Email Address</label>
+                  <input 
+                    type="email" 
+                    className="form-control" 
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    placeholder="name@example.com"
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input 
+                  type="password" 
+                  className="form-control" 
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+
+              <div style={{ marginTop: "1rem", textAlign: "center" }}>
+                <a 
+                  href="#" 
+                  style={{ fontSize: "0.85rem", color: "var(--primary)", textDecoration: "underline" }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setAuthMode(authMode === "login" ? "register" : "login");
+                  }}
+                >
+                  {authMode === "login" 
+                    ? "Don't have an account? Sign Up" 
+                    : "Already have an account? Sign In"}
+                </a>
+              </div>
+
+              <div className="modal-footer" style={{ marginTop: "1.5rem" }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => setShowAuthModal(false)}
+                  disabled={authSubmitting}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={authSubmitting}
+                >
+                  {authSubmitting ? "Authenticating..." : authMode === "login" ? "Sign In & Publish" : "Register & Publish"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

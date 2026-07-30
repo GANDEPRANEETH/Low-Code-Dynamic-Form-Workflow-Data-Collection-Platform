@@ -1,9 +1,14 @@
 import secrets
 from rest_framework import serializers
-from .models import Form, Field, FormVersion
+from django.contrib.auth.models import User
+from .models import Form, Field, FormVersion, Response
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email']
 
 class FieldSerializer(serializers.ModelSerializer):
-    # Enable explicit form id in fields, but allow it to be optional for creation through nested paths
     form_id = serializers.IntegerField(write_only=True, required=False)
 
     class Meta:
@@ -20,24 +25,22 @@ class FieldSerializer(serializers.ModelSerializer):
         return value.lower()
 
 class FormSerializer(serializers.ModelSerializer):
-    # Nest fields list, ordered by display_order
     fields = serializers.SerializerMethodField(method_name='get_form_fields')
+    owner = UserSerializer(read_only=True)
 
     class Meta:
         model = Form
         fields = [
-            'id', 'title', 'description', 'status', 
+            'id', 'owner', 'title', 'description', 'status', 
             'current_version', 'share_slug', 'created_at', 'updated_at', 'fields'
         ]
-        read_only_fields = ['id', 'status', 'current_version', 'share_slug', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'owner', 'status', 'current_version', 'share_slug', 'created_at', 'updated_at']
 
     def get_form_fields(self, obj):
-        # Retrieve associated fields sorted by display_order
         ordered_fields = obj.fields.all().order_by('display_order')
         return FieldSerializer(ordered_fields, many=True).data
 
     def create(self, validated_data):
-        # Generate unique slug
         while True:
             slug = secrets.token_urlsafe(8).lower().replace("_", "-").replace("~", "-")
             if not Form.objects.filter(share_slug=slug).exists():
@@ -52,3 +55,9 @@ class FormVersionSerializer(serializers.ModelSerializer):
         model = FormVersion
         fields = ['id', 'form', 'version', 'schema_snapshot', 'published_at']
         read_only_fields = ['id', 'published_at']
+
+class ResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Response
+        fields = ['id', 'form', 'form_version', 'submitted_data', 'submitted_at']
+        read_only_fields = ['id', 'submitted_at']

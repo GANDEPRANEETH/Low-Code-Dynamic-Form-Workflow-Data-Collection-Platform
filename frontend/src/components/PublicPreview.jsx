@@ -7,10 +7,15 @@ import "../styles/form.css";
 function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [responses, setResponses] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [loadedSuccessfully, setLoadedSuccessfully] = useState(false);
+
+  // File states
+  const [uploadingField, setUploadingField] = useState({});
+  const [fileNames, setFileNames] = useState({});
 
   useEffect(() => {
     fetchPublicForm();
@@ -44,10 +49,10 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
   };
 
   const handleInputChange = (fieldId, value) => {
-    setResponses({
-      ...responses,
+    setResponses((prev) => ({
+      ...prev,
       [fieldId]: value
-    });
+    }));
   };
 
   const handleCheckboxToggle = (fieldId, option, isChecked) => {
@@ -61,7 +66,41 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
     handleInputChange(fieldId, updated);
   };
 
-  const handleSubmit = (e) => {
+  // Upload attachment file handler
+  const handleFileSelect = async (fieldId, file) => {
+    if (!file) return;
+
+    const allowed = ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg'];
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!allowed.includes(ext)) {
+      showToast(`Unsupported file format. Allowed types: ${allowed.join(', ')}`, "error");
+      return;
+    }
+
+    try {
+      setUploadingField((prev) => ({ ...prev, [fieldId]: true }));
+      const res = await api.uploadFile(file);
+      handleInputChange(fieldId, res.file_url);
+      setFileNames((prev) => ({ ...prev, [fieldId]: file.name }));
+      showToast("File uploaded successfully!");
+    } catch (err) {
+      showToast(err.message || "Failed to upload file attachment", "error");
+    } finally {
+      setUploadingField((prev) => ({ ...prev, [fieldId]: false }));
+    }
+  };
+
+  const handleRemoveFile = (fieldId) => {
+    handleInputChange(fieldId, "");
+    setFileNames((prev) => {
+      const updated = { ...prev };
+      delete updated[fieldId];
+      return updated;
+    });
+    showToast("File attachment removed");
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     // Field requirements validation
@@ -83,8 +122,16 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
       }
     }
 
-    setSubmitted(true);
-    showToast("Response simulation verified!");
+    try {
+      setSubmitting(true);
+      await api.submitResponse(shareSlug, responses);
+      setSubmitted(true);
+      showToast("Responses submitted successfully!");
+    } catch (err) {
+      showToast(err.message || "Failed to submit responses", "error");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -120,12 +167,12 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
       <div className="preview-wrapper fade-in">
         <div className="success-container">
           <CheckCircle size={48} className="success-icon" />
-          <h2>Submission Simulated</h2>
+          <h2>Submission Successful</h2>
           <p>
-            Thank you! Your response simulation for "{form.title}" was successfully verified. Form layout rendering works correctly.
+            Thank you! Your response for "{form.title}" has been successfully recorded.
           </p>
           <div className="success-actions">
-            <button className="btn btn-primary" onClick={() => setSubmitted(false)}>
+            <button className="btn btn-primary" onClick={() => { setSubmitted(false); fetchPublicForm(); }}>
               Fill Out Again
             </button>
             {!isPublicOnly && (
@@ -177,7 +224,7 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
                 {field.field_type === "dropdown" && (
                   <select 
                     className="form-control"
-                    value={val}
+                    value={val || ""}
                     onChange={(e) => handleInputChange(field.id, e.target.value)}
                     required={field.required}
                   >
@@ -223,16 +270,46 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
                 )}
 
                 {field.field_type === "file" && (
-                  <div className="file-dropzone">
-                    <FileUp size={24} className="file-dropzone-icon" />
-                    <span className="file-dropzone-text">
-                      {field.placeholder || "Drag and drop or click to upload attachment"}
-                    </span>
+                  <div style={{ position: "relative" }}>
                     <input 
                       type="file" 
+                      id={`file-input-${field.id}`} 
                       style={{ display: "none" }} 
-                      required={field.required && !val}
+                      accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                      onChange={(e) => handleFileSelect(field.id, e.target.files[0])}
                     />
+                    
+                    {uploadingField[field.id] ? (
+                      <div className="file-dropzone" style={{ pointerEvents: "none", opacity: 0.7 }}>
+                        <Loader size={20} className="animate-spin text-indigo-500" style={{ animation: "spin 1s linear infinite", marginBottom: "0.5rem" }} />
+                        <span className="file-dropzone-text">Uploading attachment...</span>
+                      </div>
+                    ) : val ? (
+                      <div className="file-dropzone" style={{ borderStyle: "solid", borderColor: "var(--primary)", background: "rgba(79, 70, 229, 0.05)" }}>
+                        <span className="file-dropzone-text" style={{ color: "var(--text-main)", fontWeight: "600", marginBottom: "0.5rem" }}>
+                          ✓ {fileNames[field.id] || "attached_file.bin"}
+                        </span>
+                        <button 
+                          type="button" 
+                          className="btn btn-secondary" 
+                          style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}
+                          onClick={() => handleRemoveFile(field.id)}
+                        >
+                          Remove File
+                        </button>
+                      </div>
+                    ) : (
+                      <div 
+                        className="file-dropzone" 
+                        onClick={() => document.getElementById(`file-input-${field.id}`).click()}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <FileUp size={24} className="file-dropzone-icon" />
+                        <span className="file-dropzone-text">
+                          {field.placeholder || "Click to upload attachment (PDF, DOC, PNG, JPG)"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -241,7 +318,7 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
                     type={field.field_type === "number" ? "number" : field.field_type === "date" ? "date" : "text"}
                     className="form-control"
                     placeholder={field.placeholder || ""}
-                    value={val}
+                    value={val || ""}
                     onChange={(e) => handleInputChange(field.id, e.target.value)}
                     required={field.required}
                   />
@@ -252,8 +329,13 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
         </div>
 
         <div style={{ marginTop: "2.5rem" }}>
-          <button type="submit" className="btn btn-primary" style={{ width: "100%", padding: "1rem" }}>
-            Submit Mock Responses
+          <button 
+            type="submit" 
+            className="btn btn-primary" 
+            style={{ width: "100%", padding: "1rem" }}
+            disabled={submitting}
+          >
+            {submitting ? "Submitting response..." : "Submit Responses"}
           </button>
         </div>
       </form>

@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 
 class Form(models.Model):
     STATUS_CHOICES = [
@@ -7,6 +8,7 @@ class Form(models.Model):
         ('Archived', 'Archived'),
     ]
 
+    owner = models.ForeignKey(User, related_name='forms', on_delete=models.CASCADE, null=True, blank=True)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Draft')
@@ -39,3 +41,12 @@ class FormVersion(models.Model):
 
     def __str__(self):
         return f"{self.form.title} - v{self.version}"
+
+class Response(models.Model):
+    form = models.ForeignKey(Form, related_name='responses', on_delete=models.CASCADE)
+    form_version = models.ForeignKey(FormVersion, related_name='responses', on_delete=models.SET_NULL, null=True)
+    submitted_data = models.JSONField(default=dict)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Response to {self.form.title} at {self.submitted_at}"
