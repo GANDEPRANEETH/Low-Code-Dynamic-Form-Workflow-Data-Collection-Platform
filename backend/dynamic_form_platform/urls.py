@@ -44,6 +44,17 @@ urlpatterns = [
     path('api/public/<str:share_slug>/submit', public_views.submit_response),
 ]
 
-# Serve media files in development mode
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+from django.views.generic import TemplateView
+from django.views.decorators.csrf import ensure_csrf_cookie
+
+# Serve media files
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Serve frontend static assets from /assets/
+urlpatterns += static('/assets/', document_root=settings.BASE_DIR.parent / 'frontend' / 'dist' / 'assets')
+
+# Catch-all to serve index.html for frontend routing
+urlpatterns += [
+    path('', ensure_csrf_cookie(TemplateView.as_view(template_name='index.html'))),
+    path('<path:path>', ensure_csrf_cookie(TemplateView.as_view(template_name='index.html'))),
+]

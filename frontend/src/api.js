@@ -1,4 +1,16 @@
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const getApiBase = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  const hostname = window.location.hostname;
+  const isLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname.startsWith("192.168.") || hostname.startsWith("10.");
+  if (!isLocal) {
+    return window.location.origin;
+  }
+  return "http://localhost:8000";
+};
+
+const API_BASE = getApiBase();
 
 async function request(url, options = {}) {
   const headers = {
