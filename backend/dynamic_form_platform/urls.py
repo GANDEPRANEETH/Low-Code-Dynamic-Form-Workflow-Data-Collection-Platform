@@ -34,6 +34,10 @@ urlpatterns = [
     path('api/forms/<int:form_id>/fields', builder_views.add_field),
     path('api/fields/<int:field_id>', builder_views.field_detail),
     
+    # Conditional Rules
+    path('api/forms/<int:form_id>/rules', builder_views.get_create_rules),
+    path('api/rules/<int:rule_id>', builder_views.delete_rule),
+    
     # Lifecycle
     path('api/forms/<int:form_id>/publish', builder_views.publish_form),
     path('api/forms/<int:form_id>/archive', builder_views.archive_form),

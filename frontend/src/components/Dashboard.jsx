@@ -239,6 +239,7 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
               <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
+                    <th style={{ padding: "0.75rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>Response ID</th>
                     <th style={{ padding: "0.75rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>Name</th>
                     <th style={{ padding: "0.75rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>Email</th>
                     <th style={{ padding: "0.75rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>Submission Time</th>
@@ -258,6 +259,7 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
                         }}
                         onClick={() => setSelectedResponse(resp)}
                       >
+                        <td style={{ padding: "0.85rem 0.75rem", fontWeight: "600", color: "var(--primary)" }}>{resp.response_id || `RESP-${resp.id}`}</td>
                         <td style={{ padding: "0.85rem 0.75rem", fontWeight: "600", color: "var(--text-main)" }}>{resp.name}</td>
                         <td style={{ padding: "0.85rem 0.75rem", color: "var(--text-main)" }}>{resp.email}</td>
                         <td style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.85rem" }}>
@@ -290,9 +292,9 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
                 </div>
                 
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                  <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                    Submitted: {new Date(selectedResponse.submitted_at).toLocaleString()} (v{selectedResponse.version})
-                  </div>
+                   <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                     <strong>ID:</strong> {selectedResponse.response_id || `RESP-${selectedResponse.id}`} | Submitted: {new Date(selectedResponse.submitted_at).toLocaleString()} (v{selectedResponse.version})
+                   </div>
                   
                   <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "0.75rem" }}>
                     <div style={{ fontWeight: "600", fontSize: "0.9rem", color: "var(--text-main)" }}>Submitter Info</div>

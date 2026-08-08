@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from django.shortcuts import get_object_or_404
-from forms.models import Form, Field, FormVersion
+from forms.models import Form, Field, FormVersion, ConditionalRule
 from forms.serializers import FormSerializer, FieldSerializer
 
 @api_view(['POST'])
@@ -87,12 +87,26 @@ def publish_form(request, form_id):
             "display_order": f.display_order
         })
 
+    # Freeze conditional rules
+    rules_qs = form_obj.conditional_rules.all()
+    rules_snapshot = []
+    for r in rules_qs:
+        rules_snapshot.append({
+            "id": r.id,
+            "trigger_field_id": r.trigger_field.id,
+            "operator": r.operator,
+            "comparison_value": r.comparison_value,
+            "target_field_id": r.target_field.id,
+            "action": r.action
+        })
+
     # Save FormVersion
     version_num = form_obj.current_version
     FormVersion.objects.create(
         form=form_obj,
         version=version_num,
-        schema_snapshot=schema_snapshot
+        schema_snapshot=schema_snapshot,
+        conditional_rules_snapshot=rules_snapshot
     )
 
     # Update form state
@@ -121,3 +135,60 @@ def archive_form(request, form_id):
 
     serializer = FormSerializer(form_obj)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def get_create_rules(request, form_id):
+    form_obj = get_object_or_404(Form, id=form_id)
+    
+    if request.method == 'GET':
+        rules = form_obj.conditional_rules.all()
+        data = []
+        for r in rules:
+            data.append({
+                "id": r.id,
+                "trigger_field_id": r.trigger_field.id,
+                "operator": r.operator,
+                "comparison_value": r.comparison_value,
+                "target_field_id": r.target_field.id,
+                "action": r.action
+            })
+        return Response(data, status=status.HTTP_200_OK)
+        
+    elif request.method == 'POST':
+        trigger_field_id = request.data.get('trigger_field_id')
+        operator = request.data.get('operator')
+        comparison_value = request.data.get('comparison_value')
+        target_field_id = request.data.get('target_field_id')
+        action = request.data.get('action')
+        
+        if not all([trigger_field_id, operator, target_field_id, action]):
+            return Response({"detail": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        trigger_field = get_object_or_404(Field, id=trigger_field_id, form=form_obj)
+        target_field = get_object_or_404(Field, id=target_field_id, form=form_obj)
+        
+        rule = ConditionalRule.objects.create(
+            form=form_obj,
+            trigger_field=trigger_field,
+            operator=operator,
+            comparison_value=comparison_value,
+            target_field=target_field,
+            action=action
+        )
+        
+        return Response({
+            "id": rule.id,
+            "trigger_field_id": rule.trigger_field.id,
+            "operator": rule.operator,
+            "comparison_value": rule.comparison_value,
+            "target_field_id": rule.target_field.id,
+            "action": rule.action
+        }, status=status.HTTP_201_CREATED)
+
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+def delete_rule(request, rule_id):
+    rule = get_object_or_404(ConditionalRule, id=rule_id)
+    rule.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)

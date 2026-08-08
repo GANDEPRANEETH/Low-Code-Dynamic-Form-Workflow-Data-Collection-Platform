@@ -35,7 +35,10 @@ async function request(url, options = {}) {
 
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.detail || "Something went wrong");
+    const error = new Error(errData.detail || errData.message || "Something went wrong");
+    error.errors = errData.errors;
+    error.detail = errData.detail;
+    throw error;
   }
 
   return response.json();
@@ -63,6 +66,11 @@ export const api = {
   publishForm: (id) => request(`/api/forms/${id}/publish`, { method: "POST" }),
   archiveForm: (id) => request(`/api/forms/${id}/archive`, { method: "POST" }),
   
+  // Rules
+  getRules: (formId) => request(`/api/forms/${formId}/rules`),
+  createRule: (formId, data) => request(`/api/forms/${formId}/rules`, { method: "POST", body: JSON.stringify(data) }),
+  deleteRule: (id) => request(`/api/rules/${id}`, { method: "DELETE" }),
+
   // Responses Submissions
   getResponses: (formId) => request(`/api/forms/${formId}/responses`),
   exportCSVUrl: (formId) => `${API_BASE}/api/forms/${formId}/export`,

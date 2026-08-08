@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { 
   ArrowLeft, Type, Hash, Mail, List, CheckSquare, Calendar, Star, FileUp, 
-  Settings, Eye, Loader, Globe
+  Settings, Eye, Loader, Globe, Trash2
 } from "lucide-react";
 import FieldCard from "./FieldCard";
 import FieldSettings from "./FieldSettings";
@@ -30,6 +30,7 @@ function FormBuilder({ formId, onBack, showToast }) {
   const [savingForm, setSavingForm] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [activeTab, setActiveTab] = useState("properties"); // "properties" or "rules"
 
   // Auth modal state for publishing
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -331,17 +332,66 @@ function FormBuilder({ formId, onBack, showToast }) {
           )}
         </div>
 
-        {/* COLUMN 3: PROPERTIES PANEL */}
+        {/* COLUMN 3: PROPERTIES & RULES PANEL */}
         <div className="panel">
-          <div className="panel-header">
-            <h3>Field Properties</h3>
-            <p>Configure settings and validations for the selected field</p>
+          <div className="panel-header" style={{ paddingBottom: "0.5rem" }}>
+            <div style={{ display: "flex", gap: "1rem", marginBottom: "0.5rem", borderBottom: "1px solid var(--border-color)" }}>
+              <button 
+                type="button"
+                className={`tab-btn ${activeTab === 'properties' ? 'active' : ''}`}
+                onClick={() => setActiveTab('properties')}
+                style={{
+                  background: "none",
+                  border: "none",
+                  borderBottom: activeTab === 'properties' ? "2px solid var(--primary)" : "none",
+                  color: activeTab === 'properties' ? "var(--text-main)" : "var(--text-muted)",
+                  padding: "0.5rem 0",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  fontSize: "0.85rem"
+                }}
+              >
+                Field Properties
+              </button>
+              <button 
+                type="button"
+                className={`tab-btn ${activeTab === 'rules' ? 'active' : ''}`}
+                onClick={() => setActiveTab('rules')}
+                style={{
+                  background: "none",
+                  border: "none",
+                  borderBottom: activeTab === 'rules' ? "2px solid var(--primary)" : "none",
+                  color: activeTab === 'rules' ? "var(--text-main)" : "var(--text-muted)",
+                  padding: "0.5rem 0",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  fontSize: "0.85rem"
+                }}
+              >
+                Conditional Rules
+              </button>
+            </div>
+            <p style={{ fontSize: "0.75rem", margin: 0, color: "var(--text-muted)", marginTop: "0.25rem" }}>
+              {activeTab === 'properties' 
+                ? "Configure settings and validations for the selected field"
+                : "Configure logic flow to show, hide, or require fields based on trigger values"
+              }
+            </p>
           </div>
-          <FieldSettings 
-            field={selectedField}
-            onUpdate={handleUpdateField}
-            showToast={showToast}
-          />
+          
+          {activeTab === 'properties' ? (
+            <FieldSettings 
+              field={selectedField}
+              onUpdate={handleUpdateField}
+              showToast={showToast}
+            />
+          ) : (
+            <ConditionalRulesBuilder 
+              formId={formId}
+              fields={fields}
+              showToast={showToast}
+            />
+          )}
         </div>
 
       </div>
@@ -529,6 +579,231 @@ function FormBuilder({ formId, onBack, showToast }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ConditionalRulesBuilder({ formId, fields, showToast }) {
+  const [rules, setRules] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Form states for creating a new rule
+  const [triggerFieldId, setTriggerFieldId] = useState("");
+  const [operator, setOperator] = useState("equals");
+  const [comparisonValue, setComparisonValue] = useState("");
+  const [targetFieldId, setTargetFieldId] = useState("");
+  const [action, setAction] = useState("show");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    fetchRules();
+  }, [formId]);
+
+  const fetchRules = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getRules(formId);
+      setRules(data);
+    } catch (err) {
+      showToast(err.message || "Failed to load conditional rules", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveRule = async (e) => {
+    e.preventDefault();
+    if (!triggerFieldId || !operator || !targetFieldId || !action) {
+      showToast("Please fill in all rule logic fields", "error");
+      return;
+    }
+    if (operator !== "is_empty" && !comparisonValue.trim()) {
+      showToast("Please specify a comparison value for this operator", "error");
+      return;
+    }
+    if (triggerFieldId === targetFieldId) {
+      showToast("Trigger field and target field must be different", "error");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const newRule = await api.createRule(formId, {
+        trigger_field_id: Number(triggerFieldId),
+        operator,
+        comparison_value: operator === "is_empty" ? "" : comparisonValue.trim(),
+        target_field_id: Number(targetFieldId),
+        action
+      });
+      setRules((prev) => [...prev, newRule]);
+      showToast("Conditional rule created successfully!");
+      
+      // Reset inputs
+      setTriggerFieldId("");
+      setOperator("equals");
+      setComparisonValue("");
+      setTargetFieldId("");
+      setAction("show");
+    } catch (err) {
+      showToast(err.message || "Failed to save rule logic", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteRule = async (ruleId) => {
+    try {
+      await api.deleteRule(ruleId);
+      setRules((prev) => prev.filter((r) => r.id !== ruleId));
+      showToast("Conditional rule deleted");
+    } catch (err) {
+      showToast(err.message || "Failed to delete rule logic", "error");
+    }
+  };
+
+  const getFieldLabel = (fieldId) => {
+    const f = fields.find((x) => x.id === Number(fieldId));
+    return f ? f.label : `Field #${fieldId}`;
+  };
+
+  return (
+    <div className="fade-in" style={{ padding: "0.5rem 0" }}>
+      {/* List existing rules */}
+      <div style={{ marginBottom: "1.5rem" }}>
+        <h4 style={{ fontSize: "0.85rem", color: "var(--text-main)", marginBottom: "0.75rem", fontWeight: "600" }}>
+          Active Rules ({rules.length})
+        </h4>
+        {loading ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: "1rem" }}>
+            <Loader size={16} className="animate-spin text-indigo-500" style={{ animation: "spin 1s linear infinite" }} />
+          </div>
+        ) : rules.length === 0 ? (
+          <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", textAlign: "center", padding: "1rem 0" }}>
+            No conditional logic rules defined yet. Configure trigger rules below.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            {rules.map((rule) => (
+              <div 
+                key={rule.id} 
+                style={{ 
+                  display: "flex", 
+                  justifyContent: "space-between", 
+                  alignItems: "center", 
+                  padding: "0.75rem", 
+                  border: "1px solid var(--border-color)", 
+                  borderRadius: "6px",
+                  background: "rgba(255, 255, 255, 0.02)"
+                }}
+              >
+                <div style={{ fontSize: "0.75rem", color: "var(--text-main)", lineHeight: "1.4", flexGrow: 1, marginRight: "0.5rem" }}>
+                  <span style={{ color: "var(--primary)", fontWeight: "600" }}>IF</span> {getFieldLabel(rule.trigger_field_id)} <br/>
+                  <span style={{ color: "var(--text-muted)" }}>{rule.operator}</span> {rule.operator !== 'is_empty' && <strong>"{rule.comparison_value}"</strong>} <br/>
+                  <span style={{ color: "var(--primary)", fontWeight: "600" }}>THEN</span> <span style={{ textTransform: "uppercase", fontWeight: "600" }}>{rule.action}</span> {getFieldLabel(rule.target_field_id)}
+                </div>
+                <button 
+                  type="button" 
+                  className="btn btn-danger btn-icon"
+                  style={{ width: "24px", height: "24px", padding: 0 }}
+                  onClick={() => handleDeleteRule(rule.id)}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add new rule form */}
+      <form onSubmit={handleSaveRule} style={{ borderTop: "1px solid var(--border-color)", paddingTop: "1.25rem" }}>
+        <h4 style={{ fontSize: "0.85rem", color: "var(--text-main)", marginBottom: "0.75rem", fontWeight: "600" }}>
+          Add Logic Rule
+        </h4>
+        
+        <div className="form-group">
+          <label className="form-label" style={{ fontSize: "0.75rem" }}>IF Trigger Field</label>
+          <select 
+            className="form-control" 
+            value={triggerFieldId}
+            onChange={(e) => setTriggerFieldId(e.target.value)}
+            required
+          >
+            <option value="">Choose trigger...</option>
+            {fields.map((f) => (
+              <option key={f.id} value={f.id}>{f.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label" style={{ fontSize: "0.75rem" }}>Operator</label>
+          <select 
+            className="form-control" 
+            value={operator}
+            onChange={(e) => setOperator(e.target.value)}
+            required
+          >
+            <option value="equals">equals</option>
+            <option value="not_equals">not_equals</option>
+            <option value="contains">contains</option>
+            <option value="greater_than">greater_than</option>
+            <option value="is_empty">is_empty</option>
+          </select>
+        </div>
+
+        {operator !== "is_empty" && (
+          <div className="form-group">
+            <label className="form-label" style={{ fontSize: "0.75rem" }}>Comparison Value</label>
+            <input 
+              type="text" 
+              className="form-control" 
+              placeholder="E.g., Yes"
+              value={comparisonValue}
+              onChange={(e) => setComparisonValue(e.target.value)}
+              required
+            />
+          </div>
+        )}
+
+        <div className="form-group">
+          <label className="form-label" style={{ fontSize: "0.75rem" }}>THEN Target Field</label>
+          <select 
+            className="form-control" 
+            value={targetFieldId}
+            onChange={(e) => setTargetFieldId(e.target.value)}
+            required
+          >
+            <option value="">Choose target...</option>
+            {fields.filter((f) => f.id.toString() !== triggerFieldId).map((f) => (
+              <option key={f.id} value={f.id}>{f.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label" style={{ fontSize: "0.75rem" }}>Action</label>
+          <select 
+            className="form-control" 
+            value={action}
+            onChange={(e) => setAction(e.target.value)}
+            required
+          >
+            <option value="show">show</option>
+            <option value="hide">hide</option>
+            <option value="require">require</option>
+          </select>
+        </div>
+
+        <button 
+          type="submit" 
+          className="btn btn-primary"
+          style={{ width: "100%", padding: "0.6rem", marginTop: "0.5rem" }}
+          disabled={submitting}
+        >
+          {submitting ? "Adding rule..." : "Add Rule"}
+        </button>
+      </form>
     </div>
   );
 }

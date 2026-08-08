@@ -37,6 +37,7 @@ class FormVersion(models.Model):
     form = models.ForeignKey(Form, related_name='versions', on_delete=models.CASCADE)
     version = models.IntegerField()
     schema_snapshot = models.JSONField()  # JSON representation of all fields
+    conditional_rules_snapshot = models.JSONField(default=list, blank=True, null=True)
     published_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -50,3 +51,52 @@ class Response(models.Model):
 
     def __str__(self):
         return f"Response to {self.form.title} at {self.submitted_at}"
+
+class ConditionalRule(models.Model):
+    OPERATOR_CHOICES = [
+        ('equals', 'equals'),
+        ('not_equals', 'not_equals'),
+        ('contains', 'contains'),
+        ('greater_than', 'greater_than'),
+        ('is_empty', 'is_empty'),
+    ]
+    ACTION_CHOICES = [
+        ('show', 'show'),
+        ('hide', 'hide'),
+        ('require', 'require'),
+    ]
+    form = models.ForeignKey(Form, related_name='conditional_rules', on_delete=models.CASCADE)
+    trigger_field = models.ForeignKey(Field, related_name='trigger_rules', on_delete=models.CASCADE)
+    operator = models.CharField(max_length=20, choices=OPERATOR_CHOICES)
+    comparison_value = models.CharField(max_length=255, blank=True, null=True)
+    target_field = models.ForeignKey(Field, related_name='target_rules', on_delete=models.CASCADE)
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+
+    def __str__(self):
+        return f"IF {self.trigger_field.label} {self.operator} {self.comparison_value} THEN {self.action} {self.target_field.label}"
+
+class Submission(models.Model):
+    form = models.ForeignKey(Form, related_name='submissions', on_delete=models.CASCADE)
+    form_version = models.ForeignKey(FormVersion, related_name='submissions', on_delete=models.SET_NULL, null=True)
+    response_id = models.CharField(max_length=50, unique=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Submission {self.response_id} to {self.form.title}"
+
+class ResponseValue(models.Model):
+    submission = models.ForeignKey(Submission, related_name='values', on_delete=models.CASCADE)
+    field_id = models.IntegerField()
+    value = models.JSONField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Value for field {self.field_id}: {self.value}"
+
+class UploadedFileReference(models.Model):
+    submission = models.ForeignKey(Submission, related_name='files', on_delete=models.CASCADE)
+    field_id = models.IntegerField()
+    file_name = models.CharField(max_length=255)
+    file_url = models.CharField(max_length=1024)
+
+    def __str__(self):
+        return f"File {self.file_name} for field {self.field_id}"
