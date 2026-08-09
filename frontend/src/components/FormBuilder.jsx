@@ -31,6 +31,8 @@ function FormBuilder({ formId, onBack, showToast }) {
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [activeTab, setActiveTab] = useState("properties"); // "properties" or "rules"
+  const [rules, setRules] = useState([]);
+  const [previewResponses, setPreviewResponses] = useState({});
 
   // Auth modal state for publishing
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -55,12 +57,30 @@ function FormBuilder({ formId, onBack, showToast }) {
       if (data.fields && data.fields.length > 0) {
         setSelectedField(data.fields[0]);
       }
+      const rulesData = await api.getRules(formId);
+      setRules(rulesData || []);
     } catch (err) {
       showToast(err.message || "Failed to load form details", "error");
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (showPreviewModal && fields.length > 0) {
+      const initialResponses = {};
+      fields.forEach((field) => {
+        if (field.field_type === "checkbox") {
+          initialResponses[field.id] = [];
+        } else if (field.field_type === "rating") {
+          initialResponses[field.id] = 0;
+        } else {
+          initialResponses[field.id] = "";
+        }
+      });
+      setPreviewResponses(initialResponses);
+    }
+  }, [showPreviewModal, fields]);
 
   const handleUpdateFormDetails = async () => {
     try {
@@ -389,6 +409,8 @@ function FormBuilder({ formId, onBack, showToast }) {
             <ConditionalRulesBuilder 
               formId={formId}
               fields={fields}
+              rules={rules}
+              setRules={setRules}
               showToast={showToast}
             />
           )}
@@ -425,57 +447,97 @@ function FormBuilder({ formId, onBack, showToast }) {
                 <p style={{ textAlign: "center", color: "var(--text-muted)", padding: "2rem" }}>
                   Add fields on the canvas to see them rendered.
                 </p>
-              ) : (
-                fields.map((field) => (
-                  <div key={field.id} className="form-group">
-                    <label className="form-label" style={{ color: "var(--text-main)", display: "flex", gap: "0.25rem" }}>
-                      {field.label} {field.required && <span style={{ color: "var(--danger)" }}>*</span>}
-                    </label>
-                    
-                    {field.field_type === "dropdown" && (
-                      <select className="form-control">
-                        <option value="">{field.placeholder || "Select option..."}</option>
-                        {(field.options || []).map((o, idx) => (
-                          <option key={idx} value={o}>{o}</option>
-                        ))}
-                      </select>
-                    )}
+              ) : (() => {
+                const previewFieldStates = getFieldStates(fields, rules, previewResponses);
+                return fields.map((field) => {
+                  const state = previewFieldStates[field.id];
+                  if (!state || !state.visible) return null;
 
-                    {field.field_type === "checkbox" && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.25rem" }}>
-                        {(field.options || []).map((o, idx) => (
-                          <label key={idx} className="checkbox-option">
-                            <input type="checkbox" /> <span>{o}</span>
-                          </label>
-                        ))}
-                      </div>
-                    )}
+                  const val = previewResponses[field.id];
 
-                    {field.field_type === "rating" && (
-                      <div className="rating-container">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <Star key={s} size={20} className="star-empty" />
-                        ))}
-                      </div>
-                    )}
+                  return (
+                    <div key={field.id} className="form-group">
+                      <label className="form-label" style={{ color: "var(--text-main)", display: "flex", gap: "0.25rem" }}>
+                        {field.label} {state.required && <span style={{ color: "var(--danger)" }}>*</span>}
+                      </label>
+                      
+                      {field.field_type === "dropdown" && (
+                        <select 
+                          className="form-control"
+                          value={val || ""}
+                          onChange={(e) => {
+                            setPreviewResponses(prev => ({ ...prev, [field.id]: e.target.value }));
+                          }}
+                        >
+                          <option value="">{field.placeholder || "Select option..."}</option>
+                          {(field.options || []).map((o, idx) => (
+                            <option key={idx} value={o}>{o}</option>
+                          ))}
+                        </select>
+                      )}
 
-                    {field.field_type === "file" && (
-                      <div className="file-dropzone">
-                        <FileUp size={20} className="file-dropzone-icon" />
-                        <span className="file-dropzone-text">{field.placeholder || "Upload attachment..."}</span>
-                      </div>
-                    )}
+                      {field.field_type === "checkbox" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.25rem" }}>
+                          {(field.options || []).map((o, idx) => {
+                            const isChecked = (val || []).includes(o);
+                            return (
+                              <label key={idx} className="checkbox-option">
+                                <input 
+                                  type="checkbox" 
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    const current = val || [];
+                                    const updated = e.target.checked ? [...current, o] : current.filter(x => x !== o);
+                                    setPreviewResponses(prev => ({ ...prev, [field.id]: updated }));
+                                  }}
+                                /> 
+                                <span>{o}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
 
-                    {["text", "number", "email", "date"].includes(field.field_type) && (
-                      <input 
-                        type={field.field_type === "number" ? "number" : field.field_type === "date" ? "date" : "text"} 
-                        className="form-control" 
-                        placeholder={field.placeholder || ""}
-                      />
-                    )}
-                  </div>
-                ))
-              )}
+                      {field.field_type === "rating" && (
+                        <div className="rating-container">
+                          {[1, 2, 3, 4, 5].map((s) => {
+                            const isFilled = s <= (val || 0);
+                            return (
+                              <Star 
+                                key={s} 
+                                size={20} 
+                                className={isFilled ? "star-filled" : "star-empty"} 
+                                onClick={() => {
+                                  setPreviewResponses(prev => ({ ...prev, [field.id]: s }));
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {field.field_type === "file" && (
+                        <div className="file-dropzone">
+                          <FileUp size={20} className="file-dropzone-icon" />
+                          <span className="file-dropzone-text">{field.placeholder || "Upload attachment..."}</span>
+                        </div>
+                      )}
+
+                      {["text", "number", "email", "date"].includes(field.field_type) && (
+                        <input 
+                          type={field.field_type === "number" ? "number" : field.field_type === "date" ? "date" : "text"} 
+                          className="form-control" 
+                          placeholder={field.placeholder || ""}
+                          value={val || ""}
+                          onChange={(e) => {
+                            setPreviewResponses(prev => ({ ...prev, [field.id]: e.target.value }));
+                          }}
+                        />
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
 
             <div className="modal-footer" style={{ marginTop: "2rem" }}>
@@ -583,9 +645,8 @@ function FormBuilder({ formId, onBack, showToast }) {
   );
 }
 
-function ConditionalRulesBuilder({ formId, fields, showToast }) {
-  const [rules, setRules] = useState([]);
-  const [loading, setLoading] = useState(true);
+function ConditionalRulesBuilder({ formId, fields, rules, setRules, showToast }) {
+  const loading = false;
 
   // Form states for creating a new rule
   const [triggerFieldId, setTriggerFieldId] = useState("");
@@ -594,22 +655,6 @@ function ConditionalRulesBuilder({ formId, fields, showToast }) {
   const [targetFieldId, setTargetFieldId] = useState("");
   const [action, setAction] = useState("show");
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    fetchRules();
-  }, [formId]);
-
-  const fetchRules = async () => {
-    try {
-      setLoading(true);
-      const data = await api.getRules(formId);
-      setRules(data);
-    } catch (err) {
-      showToast(err.message || "Failed to load conditional rules", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSaveRule = async (e) => {
     e.preventDefault();
@@ -809,3 +854,85 @@ function ConditionalRulesBuilder({ formId, fields, showToast }) {
 }
 
 export default FormBuilder;
+
+// Helper functions for conditional logic evaluation
+function evaluateCondition(triggerVal, operator, comparisonVal) {
+  if (triggerVal === undefined || triggerVal === null) {
+    triggerVal = "";
+  }
+  const compStr = String(comparisonVal || "");
+
+  if (operator === "is_empty") {
+    return triggerVal === "" || (Array.isArray(triggerVal) && triggerVal.length === 0);
+  }
+
+  if (Array.isArray(triggerVal)) {
+    if (operator === "equals") {
+      return triggerVal.length === 1 && String(triggerVal[0]).toLowerCase() === compStr.toLowerCase();
+    } else if (operator === "not_equals") {
+      return !(triggerVal.length === 1 && String(triggerVal[0]).toLowerCase() === compStr.toLowerCase());
+    } else if (operator === "contains") {
+      return triggerVal.some(item => String(item).toLowerCase().includes(compStr.toLowerCase()));
+    } else if (operator === "greater_than") {
+      return false;
+    }
+  } else {
+    const valStr = String(triggerVal);
+    if (operator === "equals") {
+      return valStr.toLowerCase() === compStr.toLowerCase();
+    } else if (operator === "not_equals") {
+      return valStr.toLowerCase() !== compStr.toLowerCase();
+    } else if (operator === "contains") {
+      return valStr.toLowerCase().includes(compStr.toLowerCase());
+    } else if (operator === "greater_than") {
+      const v = parseFloat(valStr);
+      const c = parseFloat(compStr);
+      return !isNaN(v) && !isNaN(c) && v > c;
+    }
+  }
+  return false;
+}
+
+function getFieldStates(fields, rules, responses) {
+  const states = {};
+  fields.forEach(f => {
+    states[f.id] = {
+      visible: true,
+      required: f.required || false
+    };
+  });
+
+  // Default to hidden if targeted by any show rule
+  rules.forEach(r => {
+    if (r.action === "show" && states[r.target_field_id]) {
+      states[r.target_field_id].visible = false;
+    }
+  });
+
+  for (let i = 0; i < 5; i++) {
+    let stateChanged = false;
+    rules.forEach(r => {
+      if (!states[r.trigger_field_id] || !states[r.target_field_id]) return;
+
+      const triggerVisible = states[r.trigger_field_id].visible;
+      const triggerVal = triggerVisible ? responses[r.trigger_field_id] : null;
+
+      const conditionMet = evaluateCondition(triggerVal, r.operator, r.comparison_value);
+      if (conditionMet) {
+        if (r.action === "show" && !states[r.target_field_id].visible) {
+          states[r.target_field_id].visible = true;
+          stateChanged = true;
+        } else if (r.action === "hide" && states[r.target_field_id].visible) {
+          states[r.target_field_id].visible = false;
+          stateChanged = true;
+        } else if (r.action === "require" && !states[r.target_field_id].required) {
+          states[r.target_field_id].required = true;
+          stateChanged = true;
+        }
+      }
+    });
+    if (!stateChanged) break;
+  }
+
+  return states;
+}
