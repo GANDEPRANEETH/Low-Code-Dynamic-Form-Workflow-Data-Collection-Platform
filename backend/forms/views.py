@@ -123,7 +123,18 @@ def get_responses(request, form_id):
 def export_responses(request, form_id):
     form_obj = get_object_or_404(Form, id=form_id)
     
-    if form_obj.owner and form_obj.owner != request.user:
+    user = request.user
+    if user.is_anonymous:
+        token_key = request.GET.get('token')
+        if token_key:
+            from rest_framework.authtoken.models import Token
+            try:
+                token = Token.objects.get(key=token_key)
+                user = token.user
+            except Token.DoesNotExist:
+                pass
+
+    if form_obj.owner and form_obj.owner != user:
         return HttpResponse("Unauthorized", status=403)
 
     submissions_qs = form_obj.submissions.all().order_by('-submitted_at')

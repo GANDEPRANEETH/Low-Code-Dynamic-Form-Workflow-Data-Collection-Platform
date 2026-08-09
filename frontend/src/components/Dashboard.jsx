@@ -118,11 +118,34 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
     }
   };
 
-  const handleExportCSV = (formId) => {
-    const csvUrl = api.exportCSVUrl(formId);
-    // Open in a new tab to trigger native HTTP attachment download
-    window.open(csvUrl, "_blank");
-    showToast("CSV Export triggered");
+  const handleExportCSV = async (formId) => {
+    try {
+      const token = localStorage.getItem("token");
+      const headers = {};
+      if (token) {
+        headers["Authorization"] = `Token ${token}`;
+      }
+      const csvUrl = api.exportCSVUrl(formId);
+      const response = await fetch(csvUrl, { headers });
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error("You do not have permission to view responses for this form.");
+        }
+        throw new Error("Failed to export responses.");
+      }
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.setAttribute("download", `form_${formId}_responses.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+      showToast("CSV Export downloaded successfully");
+    } catch (err) {
+      showToast(err.message || "Failed to export CSV", "error");
+    }
   };
 
   const getFieldLabel = (fieldId) => {
