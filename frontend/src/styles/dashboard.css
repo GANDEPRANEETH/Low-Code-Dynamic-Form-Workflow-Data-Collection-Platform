@@ -47,23 +47,30 @@
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  box-shadow: 
-    0 10px 40px rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
 }
 
+/* Glowing Top Line & Colored Glow drop shadows on stats widgets */
+.stat-widget:nth-child(1) { box-shadow: 0 10px 40px rgba(99, 102, 241, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+.stat-widget:nth-child(2) { box-shadow: 0 10px 40px rgba(34, 211, 238, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+.stat-widget:nth-child(3) { box-shadow: 0 10px 40px rgba(139, 92, 246, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+.stat-widget:nth-child(4) { box-shadow: 0 10px 40px rgba(16, 185, 129, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+
 .stat-widget:hover {
   border-color: rgba(34, 211, 238, 0.25);
   transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35), 0 0 15px rgba(34, 211, 238, 0.08);
 }
 
-/* Glowing top borders on stats cards */
+.stat-widget:nth-child(1):hover { box-shadow: 0 12px 30px rgba(99, 102, 241, 0.15); }
+.stat-widget:nth-child(2):hover { box-shadow: 0 12px 30px rgba(34, 211, 238, 0.15); }
+.stat-widget:nth-child(3):hover { box-shadow: 0 12px 30px rgba(139, 92, 246, 0.15); }
+.stat-widget:nth-child(4):hover { box-shadow: 0 12px 30px rgba(16, 185, 129, 0.15); }
+
+/* Accent border lines */
 .stat-widget::before {
   content: "";
   position: absolute;
@@ -73,10 +80,10 @@
   height: 2.5px;
 }
 
-.stat-widget:nth-child(1)::before { background: var(--primary-indigo); box-shadow: 0 1px 8px var(--primary-indigo); }
-.stat-widget:nth-child(2)::before { background: var(--cyan); box-shadow: 0 1px 8px var(--cyan); }
-.stat-widget:nth-child(3)::before { background: var(--violet); box-shadow: 0 1px 8px var(--violet); }
-.stat-widget:nth-child(4)::before { background: var(--success); box-shadow: 0 1px 8px var(--success); }
+.stat-widget:nth-child(1)::before { background: var(--primary-indigo); }
+.stat-widget:nth-child(2)::before { background: var(--cyan); }
+.stat-widget:nth-child(3)::before { background: var(--violet); }
+.stat-widget:nth-child(4)::before { background: var(--success); }
 
 .stat-widget-label {
   font-size: 0.76rem;
@@ -112,8 +119,8 @@
   box-shadow: 
     0 12px 35px rgba(0, 0, 0, 0.25),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
