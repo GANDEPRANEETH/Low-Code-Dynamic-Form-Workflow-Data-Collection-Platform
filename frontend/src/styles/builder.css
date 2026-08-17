@@ -10,7 +10,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 1.25rem;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding-bottom: 1.25rem;
   margin-bottom: 0.5rem;
 }
@@ -41,22 +41,22 @@
   }
 }
 
-/* Sidebar Panels */
+/* Sidebar Panels as Translucent Glass Panels */
 .panel {
-  background: var(--bg-glass);
-  border: 1px solid var(--border-color);
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-md);
   padding: 1.25rem;
-  box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
 .panel-header {
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding-bottom: 0.75rem;
   margin-bottom: 0.5rem;
 }
@@ -87,8 +87,8 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.65rem 0.85rem;
-  background: rgba(255, 255, 255, 0.01);
-  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -105,7 +105,7 @@
   color: var(--cyan);
   display: flex;
   align-items: center;
-  filter: drop-shadow(0 0 5px rgba(34, 211, 238, 0.2));
+  filter: drop-shadow(0 0 5px rgba(34, 211, 238, 0.25));
 }
 
 .toolbox-item-label {
@@ -114,17 +114,20 @@
   color: var(--text-main);
 }
 
-/* Canvas Dropzone */
+/* Canvas Dropzone - Center panel receives slightly more visual emphasis */
 .canvas {
   min-height: 550px;
-  background: rgba(15, 22, 36, 0.25);
-  border: 2px dashed rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.40);
+  border: 2px dashed rgba(255, 255, 255, 0.09);
   border-radius: var(--radius-lg);
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .canvas-empty {
@@ -159,23 +162,25 @@
   align-items: flex-start;
   gap: 0.85rem;
   padding: 1.1rem;
-  background: rgba(15, 22, 36, 0.45);
-  border: 1px solid var(--border-color);
+  background: rgba(15, 22, 36, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: var(--radius-md);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
 }
 
 .field-card:hover {
-  background: rgba(15, 22, 36, 0.7);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(15, 22, 36, 0.5);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
-/* Selected Field Neon Cyan / Indigo Glow */
+/* Selected Field with Cyan / Indigo Glass Glow */
 .field-card.selected {
   border-color: var(--cyan);
-  background: rgba(34, 211, 238, 0.03);
-  box-shadow: 0 0 20px rgba(34, 211, 238, 0.12), inset 0 0 10px rgba(34, 211, 238, 0.05);
+  background: rgba(34, 211, 238, 0.04);
+  box-shadow: 
+    0 0 20px rgba(34, 211, 238, 0.12),
+    inset 0 0 10px rgba(34, 211, 238, 0.05);
 }
 
 .drag-controls {
