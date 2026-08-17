@@ -3,9 +3,9 @@
   justify-content: space-between;
   align-items: center;
   padding: 0.85rem 1.75rem;
-  background: rgba(15, 22, 36, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: var(--bg-glass);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   border: 1px solid var(--border-color);
   border-top: none;
   margin-bottom: 2.25rem;
@@ -44,7 +44,7 @@
   font-size: 1.25rem;
   font-weight: 800;
   letter-spacing: -0.5px;
-  background: linear-gradient(135deg, #ffffff 40%, #a2b1c6 100%);
+  background: linear-gradient(135deg, #ffffff 40%, var(--cyan) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   line-height: 1.15;
@@ -53,7 +53,7 @@
 .logo-text p {
   font-size: 0.72rem;
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.25px;
 }
 
@@ -63,7 +63,7 @@
   gap: 1.25rem;
 }
 
-/* Submitter Profile Avatar */
+/* User Avatar Initials Badge */
 .avatar-badge {
   display: inline-flex;
   align-items: center;
@@ -71,11 +71,12 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: rgba(95, 90, 246, 0.15);
-  color: #c7d2fe;
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--cyan);
   font-weight: 700;
   font-size: 0.75rem;
-  border: 1px solid rgba(95, 90, 246, 0.3);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.15);
 }
 
 .indicator {
@@ -83,12 +84,13 @@
   align-items: center;
   gap: 0.5rem;
   font-size: 0.76rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(15, 23, 42, 0.45);
   padding: 0.35rem 0.75rem;
   border-radius: 9999px;
   border: 1px solid var(--border-color);
+  backdrop-filter: blur(8px);
 }
 
 .indicator-dot {
@@ -96,12 +98,12 @@
   height: 7px;
   border-radius: 50%;
   background-color: var(--success);
-  box-shadow: 0 0 8px var(--success);
+  box-shadow: 0 0 10px var(--success);
   animation: pulse-dot 2s infinite;
 }
 
 @keyframes pulse-dot {
-  0% { transform: scale(0.95); opacity: 0.7; }
-  50% { transform: scale(1.15); opacity: 1; }
-  100% { transform: scale(0.95); opacity: 0.7; }
+  0% { transform: scale(0.9); opacity: 0.6; }
+  50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 14px var(--success); }
+  100% { transform: scale(0.9); opacity: 0.6; }
 }

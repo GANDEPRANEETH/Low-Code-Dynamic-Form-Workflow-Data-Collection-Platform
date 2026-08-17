@@ -1,29 +1,37 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-main: #080b11;
-  --bg-card: #0f1624;
-  --bg-card-hover: #141c2c;
-  --border-color: rgba(255, 255, 255, 0.05);
-  --border-focus: #5f5af6;
-  --text-main: #f8fafc;
-  --text-muted: #8e9bb0;
+  --bg-main: #050914;
+  --bg-surface: #0B1220;
+  --bg-glass: rgba(15, 23, 42, 0.65);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-focus: #22D3EE;
   
-  --primary: #5f5af6;
-  --primary-glow: rgba(95, 90, 246, 0.25);
-  --primary-grad: linear-gradient(135deg, #5f5af6 0%, #8b5cf6 100%);
+  --primary-indigo: #6366F1;
+  --primary-blue: #3B82F6;
+  --cyan: #22D3EE;
+  --violet: #8B5CF6;
   
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --info: #0ea5e9;
+  --primary: #6366F1;
+  --primary-glow: rgba(99, 102, 241, 0.25);
+  --primary-grad: linear-gradient(135deg, #6366F1 0%, #3B82F6 50%, #22D3EE 100%);
+  --violet-grad: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
+  
+  --success: #10B981;
+  --warning: #F59E0B;
+  --error: #EF4444;
+  --danger: #EF4444;
+  
+  --text-main: #F8FAFC;
+  --text-muted: #94A3B8;
+  --text-muted-dark: #64748B;
   
   --font-display: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
-  --shadow-md: 0 8px 30px rgba(0,0,0,0.6);
-  --shadow-lg: 0 16px 40px rgba(0,0,0,0.7);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.85);
   
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -42,9 +50,11 @@ body {
   font-family: var(--font-sans);
   min-height: 100vh;
   overflow-x: hidden;
+  /* Premium dark navy atmospheric lighting backdrop */
   background-image: 
-    radial-gradient(at 0% 0%, rgba(95, 90, 246, 0.08) 0px, transparent 40%),
-    radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.07) 0px, transparent 40%);
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.09) 0px, transparent 40%),
+    radial-gradient(at 100% 0%, rgba(34, 211, 238, 0.07) 0px, transparent 35%),
+    radial-gradient(at 50% 100%, rgba(139, 92, 246, 0.06) 0px, transparent 40%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
@@ -65,7 +75,7 @@ body {
   background: rgba(255, 255, 255, 0.15);
 }
 
-/* Animations */
+/* Base Animations */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
@@ -79,7 +89,7 @@ body {
   animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Containers & Layout */
+/* Layout Container */
 .app-container {
   max-width: 1440px;
   margin: 0 auto;
@@ -87,37 +97,35 @@ body {
   min-height: 100vh;
 }
 
-main {
-  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Glass Surface Style */
+/* Translucent Glass Surfaces */
 .glass-card {
-  background: var(--bg-card);
+  background: var(--bg-glass);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 1.5rem;
   box-shadow: var(--shadow-md);
-  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transition: border-color 0.25s ease, background-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
 }
 
 .glass-card:hover {
-  background: var(--bg-card-hover);
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: var(--shadow-lg);
+  background: rgba(15, 23, 42, 0.75);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
   transform: translateY(-2px);
 }
 
-/* Buttons System */
+/* Button UI */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.6rem 1.2rem;
+  padding: 0.6rem 1.25rem;
   font-family: var(--font-sans);
-  font-weight: 500;
-  font-size: 0.85rem;
+  font-weight: 600;
+  font-size: 0.84rem;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
@@ -134,7 +142,7 @@ main {
 
 .btn-primary:hover {
   filter: brightness(1.1);
-  box-shadow: 0 6px 16px rgba(95, 90, 246, 0.4);
+  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.45);
   transform: translateY(-1px);
 }
 
@@ -143,27 +151,28 @@ main {
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-glass);
   color: var(--text-main);
   border-color: var(--border-color);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .btn-danger {
-  background: rgba(239, 68, 68, 0.08);
-  color: #f87171;
+  background: var(--bg-glass);
+  color: #fca5a5;
   border-color: rgba(239, 68, 68, 0.25);
 }
 
 .btn-danger:hover {
-  background: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  border-color: var(--error);
   color: white;
-  border-color: #ef4444;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
 }
 
 .btn-icon {
@@ -178,43 +187,43 @@ main {
 
 .form-label {
   display: block;
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: 0.76rem;
+  font-weight: 700;
   color: var(--text-muted);
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.45rem;
   text-transform: uppercase;
   letter-spacing: 0.75px;
 }
 
 .form-control {
   width: 100%;
-  padding: 0.65rem 0.9rem;
-  background: rgba(8, 11, 17, 0.8);
+  padding: 0.65rem 0.95rem;
+  background: rgba(5, 9, 20, 0.7);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   color: var(--text-main);
   font-family: var(--font-sans);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .form-control:focus {
   outline: none;
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 2px rgba(95, 90, 246, 0.2);
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.25);
 }
 
 .form-control::placeholder {
-  color: rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.2);
 }
 
 /* Badges */
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.2rem 0.5rem;
+  padding: 0.2rem 0.55rem;
   font-size: 0.7rem;
-  font-weight: 600;
+  font-weight: 700;
   border-radius: 9999px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -234,12 +243,12 @@ main {
 }
 
 .badge-archived {
-  background: rgba(107, 114, 128, 0.1);
-  color: #9ca3af;
-  border-color: rgba(107, 114, 128, 0.2);
+  background: rgba(100, 116, 139, 0.08);
+  color: #cbd5e1;
+  border-color: rgba(100, 116, 139, 0.2);
 }
 
-/* Star Rating Layout */
+/* Rating Stars */
 .rating-container {
   display: flex;
   gap: 0.35rem;
@@ -255,15 +264,15 @@ main {
   color: rgba(255, 255, 255, 0.15);
 }
 
-/* Standard Modal Overlay */
+/* Modal Overlay & Card styling */
 .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(4, 6, 10, 0.8);
-  backdrop-filter: blur(8px);
+  background: rgba(3, 5, 10, 0.85);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -272,13 +281,15 @@ main {
 }
 
 .modal-content {
-  background: var(--bg-card);
+  background: var(--bg-glass);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 2rem;
   max-width: 500px;
   width: 100%;
   box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   position: relative;
 }
 
@@ -294,8 +305,9 @@ main {
 .modal-header h3 {
   font-family: var(--font-display);
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--text-main);
+  letter-spacing: -0.5px;
 }
 
 .modal-footer {
@@ -312,18 +324,19 @@ main {
   position: fixed;
   bottom: 2rem;
   right: 2rem;
-  background: #111827;
+  background: rgba(15, 23, 42, 0.85);
   border: 1px solid var(--border-color);
-  border-left: 4px solid var(--primary);
+  border-left: 4px solid var(--primary-indigo);
   box-shadow: var(--shadow-lg);
   padding: 0.85rem 1.5rem;
   border-radius: var(--radius-sm);
   color: var(--text-main);
   z-index: 9999;
   font-size: 0.85rem;
-  font-weight: 500;
+  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  backdrop-filter: blur(10px);
   animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
