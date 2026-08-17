@@ -355,23 +355,43 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
     <div className="fade-in">
       <div className="dashboard-header">
         <div className="dashboard-title">
-          <h2>Your Forms</h2>
-          <p>Create, manage, and publish dynamic schemas</p>
+          <h2>Your Forms Workspace</h2>
+          <p>Create, manage, validate, and publish your custom schemas</p>
         </div>
         <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-          <Plus size={16} /> Create Form
+          <Plus size={14} /> Create Form Draft
         </button>
+      </div>
+
+      {/* SaaS Stats Grid */}
+      <div className="stats-grid">
+        <div className="stat-widget">
+          <span className="stat-widget-label">Total Workspaces</span>
+          <span className="stat-widget-value">{forms.length}</span>
+        </div>
+        <div className="stat-widget">
+          <span className="stat-widget-label">Published Live</span>
+          <span className="stat-widget-value">{forms.filter(f => f.status === 'Published').length}</span>
+        </div>
+        <div className="stat-widget">
+          <span className="stat-widget-label">Pending Drafts</span>
+          <span className="stat-widget-value">{forms.filter(f => f.status === 'Draft').length}</span>
+        </div>
+        <div className="stat-widget">
+          <span className="stat-widget-label">Archived Deactivated</span>
+          <span className="stat-widget-value">{forms.filter(f => f.status === 'Archived').length}</span>
+        </div>
       </div>
 
       {forms.length === 0 ? (
         <div className="empty-dashboard">
-          <ServerCrash size={40} className="empty-dashboard-icon" />
-          <h3>No forms configured</h3>
-          <p style={{ color: "var(--text-muted)", margin: "0.5rem 0 1.5rem", fontSize: "0.9rem" }}>
+          <ServerCrash size={32} className="empty-dashboard-icon" />
+          <h3>Start building schemas</h3>
+          <p style={{ color: "var(--text-muted)", margin: "0.5rem 0 1.5rem", fontSize: "0.85rem" }}>
             Add your first custom form draft to populate the workspace.
           </p>
           <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-            <Plus size={16} /> Create Form
+            <Plus size={14} /> Create Form Draft
           </button>
         </div>
       ) : (
@@ -386,7 +406,7 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
               <div key={form.id} className="glass-card form-card">
                 <div className="form-card-top">
                   <div>
-                    <span className="form-card-version">v{displayVersion}</span>
+                    <span className="form-card-version">Schema v{displayVersion}</span>
                     <h3 className="form-card-title" title={form.title}>{form.title}</h3>
                   </div>
                   {isDraft && <span className="badge badge-draft">Draft</span>}
@@ -403,9 +423,9 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
                     <button 
                       className="btn btn-secondary btn-icon" 
                       onClick={() => onEditForm(form.id)}
-                      title="Edit Form"
+                      title="Edit Form Canvas"
                     >
-                      <Edit2 size={14} />
+                      <Edit2 size={13} style={{ color: "var(--text-muted)" }} />
                     </button>
                     {isPublished ? (
                       <>
@@ -414,54 +434,54 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
                           onClick={() => copyShareLink(form.share_slug)}
                           title="Copy Public URL"
                         >
-                          <Copy size={14} />
+                          <Copy size={13} style={{ color: "var(--text-muted)" }} />
                         </button>
                         <button 
                           className="btn btn-secondary btn-icon" 
                           onClick={() => onViewPreview(form.share_slug)}
                           title="Open Public Preview"
                         >
-                          <ExternalLink size={14} />
+                          <ExternalLink size={13} style={{ color: "var(--text-muted)" }} />
                         </button>
                         <button 
                           className="btn btn-secondary btn-icon" 
-                          style={{ color: "var(--primary)" }}
+                          style={{ borderColor: "rgba(95, 90, 246, 0.2)" }}
                           onClick={() => handleViewResponses(form)}
-                          title="View Submissions"
+                          title="View Submissions Database"
                         >
-                          <MessageSquare size={14} />
+                          <MessageSquare size={13} style={{ color: "var(--primary)" }} />
                         </button>
                         <button 
                           className="btn btn-secondary btn-icon" 
-                          style={{ color: "var(--warning)" }}
+                          style={{ borderColor: "rgba(245, 158, 11, 0.2)" }}
                           onClick={() => handleArchiveForm(form.id)}
-                          title="Archive Form"
+                          title="Deactivate and Archive"
                         >
-                          <Archive size={14} />
+                          <Archive size={13} style={{ color: "var(--warning)" }} />
                         </button>
                       </>
                     ) : (
                       <>
                         <button 
                           className="btn btn-primary" 
-                          style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
+                          style={{ padding: "0.35rem 0.75rem", fontSize: "0.78rem" }}
                           onClick={() => handlePublishForm(form.id)}
                         >
-                          Publish
+                          Publish Live
                         </button>
                         {isArchived && (
                           <>
                             <button 
                               className="btn btn-secondary btn-icon" 
-                              style={{ color: "var(--primary)" }}
+                              style={{ borderColor: "rgba(95, 90, 246, 0.2)" }}
                               onClick={() => handleViewResponses(form)}
-                              title="View Submissions"
+                              title="View Submissions Database"
                             >
-                              <MessageSquare size={14} />
+                              <MessageSquare size={13} style={{ color: "var(--primary)" }} />
                             </button>
                             <button 
                               className="btn btn-secondary" 
-                              style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
+                              style={{ padding: "0.35rem 0.75rem", fontSize: "0.78rem" }}
                               onClick={() => handlePublishForm(form.id)}
                             >
                               Re-Publish
@@ -474,9 +494,9 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
                   <button 
                     className="btn btn-danger btn-icon" 
                     onClick={() => handleDeleteForm(form.id, form.title)}
-                    title="Delete Form"
+                    title="Delete Form Workspace"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={13} />
                   </button>
                 </div>
               </div>
@@ -490,10 +510,10 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
         <div className="modal-overlay">
           <div className="modal-content fade-in">
             <div className="modal-header">
-              <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>New Form Draft</h3>
+              <h3>Create Form Workspace</h3>
               <button 
                 className="btn btn-secondary btn-icon" 
-                style={{ borderRadius: "50%", width: "30px", height: "30px" }}
+                style={{ borderRadius: "50%", width: "26px", height: "26px", padding: 0 }}
                 onClick={() => setShowCreateModal(false)}
               >
                 &times;
@@ -505,7 +525,7 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
                 <input 
                   type="text" 
                   className="form-control" 
-                  placeholder="E.g., Event Registration"
+                  placeholder="E.g., Client Intake Survey"
                   value={newFormTitle}
                   onChange={(e) => setNewFormTitle(e.target.value)}
                   required
@@ -515,7 +535,7 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
                 <label className="form-label">Description (Optional)</label>
                 <textarea 
                   className="form-control" 
-                  placeholder="Describe the purpose of this form schema..."
+                  placeholder="Describe the purpose of this form workspace..."
                   rows="3"
                   value={newFormDesc}
                   onChange={(e) => setNewFormDesc(e.target.value)}
@@ -535,7 +555,7 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
                   className="btn btn-primary"
                   disabled={submitting}
                 >
-                  {submitting ? "Creating..." : "Create Draft"}
+                  {submitting ? "Creating..." : "Create Workspace"}
                 </button>
               </div>
             </form>
