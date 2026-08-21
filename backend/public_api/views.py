@@ -127,12 +127,35 @@ def get_public_form(request, share_slug):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
+    # Generate unique started submission
+    attempts = 0
+    resp_id = None
+    while True:
+        resp_id = 'RESP-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        if not Submission.objects.filter(response_id=resp_id).exists():
+            break
+        attempts += 1
+        if attempts > 100:
+            resp_id = None
+            break
+            
+    if resp_id:
+        Submission.objects.create(
+            form=form_obj,
+            form_version=latest_version,
+            response_id=resp_id,
+            status='Started'
+        )
+        form_obj.started_count = form_obj.started_count + 1
+        form_obj.save(update_fields=['started_count'])
+
     return Response({
         "title": form_obj.title,
         "description": form_obj.description,
         "version": latest_version.version,
         "fields": latest_version.schema_snapshot,
-        "conditional_rules": latest_version.conditional_rules_snapshot or []
+        "conditional_rules": latest_version.conditional_rules_snapshot or [],
+        "response_id": resp_id
     }, status=status.HTTP_200_OK)
 
 
@@ -254,22 +277,36 @@ def submit_response(request, share_slug):
     if errors:
         return Response({"success": False, "errors": errors}, status=status.HTTP_400_BAD_REQUEST)
 
+    client_response_id = request.data.get('response_id')
+    submission = None
+    if client_response_id:
+        submission = Submission.objects.filter(response_id=client_response_id, status='Started').first()
+
     try:
         with transaction.atomic():
-            attempts = 0
-            while True:
-                resp_id = 'RESP-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-                if not Submission.objects.filter(response_id=resp_id).exists():
-                    break
-                attempts += 1
-                if attempts > 100:
-                    raise Exception("Unable to generate unique Response ID")
-                    
-            submission = Submission.objects.create(
-                form=form_obj,
-                form_version=latest_version,
-                response_id=resp_id
-            )
+            if submission:
+                submission.status = 'Completed'
+                import django.utils.timezone as timezone
+                completion_time_sec = int((timezone.now() - submission.submitted_at).total_seconds())
+                submission.completion_time = completion_time_sec
+                submission.save(update_fields=['status', 'completion_time'])
+                resp_id = submission.response_id
+            else:
+                attempts = 0
+                while True:
+                    resp_id = 'RESP-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+                    if not Submission.objects.filter(response_id=resp_id).exists():
+                        break
+                    attempts += 1
+                    if attempts > 100:
+                        raise Exception("Unable to generate unique Response ID")
+                        
+                submission = Submission.objects.create(
+                    form=form_obj,
+                    form_version=latest_version,
+                    response_id=resp_id,
+                    status='Completed'
+                )
             
             for f in fields:
                 fid = f.get('id')

@@ -2,8 +2,13 @@ import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { 
   Plus, Edit2, Trash2, Globe, Archive, Copy, ExternalLink, Loader, 
-  ServerCrash, MessageSquare, ArrowLeft, Download, Eye, Star, FileUp
+  ServerCrash, MessageSquare, ArrowLeft, Download, Eye, Star, FileUp,
+  Layers, Settings, ShieldAlert, BarChart3, Clock, CheckCircle
 } from "lucide-react";
+import {
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip as ChartTooltip, Legend, BarChart, Bar, PieChart, Pie, Cell
+} from "recharts";
 import "../styles/dashboard.css";
 import "../styles/form.css";
 
@@ -17,6 +22,37 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
   const [loadingResponses, setLoadingResponses] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState(null);
 
+  // Milestone 3 Dashboard Tabs & Filters States
+  const [activeTab, setActiveTab] = useState("responses"); // responses, analytics, rules, settings, audit
+  const [selectedResponseIds, setSelectedResponseIds] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  
+  // Response Browser Filters
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [filterFieldId, setFilterFieldId] = useState("");
+  const [filterFieldValue, setFilterFieldValue] = useState("");
+  
+  // Analytics State
+  const [analytics, setAnalytics] = useState(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  
+  // Rules State
+  const [rules, setRules] = useState([]);
+  const [loadingRules, setLoadingRules] = useState(false);
+  
+  // Audit Logs State
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+  
+  // Retention Setting
+  const [retentionDays, setRetentionDays] = useState("");
+  const [savingRetention, setSavingRetention] = useState(false);
+
   // Create Form Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newFormTitle, setNewFormTitle] = useState("");
@@ -27,6 +63,26 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
     fetchForms();
   }, []);
 
+  // Sync data whenever viewingResponsesFor or filter states change
+  useEffect(() => {
+    if (viewingResponsesFor) {
+      fetchResponsesWithFilters(1);
+      fetchAnalytics();
+      fetchRules();
+      fetchAuditLogs();
+      setRetentionDays(viewingResponsesFor.retention_days || "");
+    } else {
+      setSearch("");
+      setStatusFilter("");
+      setStartDate("");
+      setEndDate("");
+      setFilterFieldId("");
+      setFilterFieldValue("");
+      setSelectedResponseIds([]);
+      setActiveTab("responses");
+    }
+  }, [viewingResponsesFor, search, statusFilter, startDate, endDate, filterFieldId, filterFieldValue]);
+
   const fetchForms = async () => {
     try {
       setLoading(true);
@@ -36,6 +92,73 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
       showToast(err.message || "Failed to load forms from engine", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchResponsesWithFilters = async (page = 1) => {
+    if (!viewingResponsesFor) return;
+    try {
+      setLoadingResponses(true);
+      const params = {
+        paginate: "true",
+        page,
+        page_size: 10,
+      };
+      if (search.trim()) params.search = search.trim();
+      if (statusFilter) params.status = statusFilter;
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      if (filterFieldId && filterFieldValue.trim()) {
+        params[`field_${filterFieldId}`] = filterFieldValue.trim();
+      }
+      
+      const data = await api.getResponses(viewingResponsesFor.id, params);
+      setResponses(data.results || []);
+      setTotalCount(data.count || 0);
+      setTotalPages(Math.ceil((data.count || 0) / 10));
+      setCurrentPage(page);
+    } catch (err) {
+      showToast(err.message || "Failed to load responses", "error");
+    } finally {
+      setLoadingResponses(false);
+    }
+  };
+
+  const fetchAnalytics = async () => {
+    if (!viewingResponsesFor) return;
+    try {
+      setLoadingAnalytics(true);
+      const data = await api.getAnalytics(viewingResponsesFor.id);
+      setAnalytics(data);
+    } catch (err) {
+      showToast(err.message || "Failed to load analytics", "error");
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
+  const fetchRules = async () => {
+    if (!viewingResponsesFor) return;
+    try {
+      setLoadingRules(true);
+      const data = await api.getRules(viewingResponsesFor.id);
+      setRules(data);
+    } catch (err) {
+      showToast(err.message || "Failed to load rules", "error");
+    } finally {
+      setLoadingRules(false);
+    }
+  };
+
+  const fetchAuditLogs = async () => {
+    try {
+      setLoadingAudit(true);
+      const data = await api.getAuditLogs();
+      setAuditLogs(data);
+    } catch (err) {
+      showToast(err.message || "Failed to load audit logs", "error");
+    } finally {
+      setLoadingAudit(false);
     }
   };
 
@@ -103,19 +226,111 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
       .catch(() => showToast("Failed to copy URL", "error"));
   };
 
-  // Submissions Dashboard Logic
-  const handleViewResponses = async (formObj) => {
-    setViewingResponsesFor(formObj);
-    setSelectedResponse(null);
+  const handleDuplicateForm = async (formId) => {
+    try {
+      setLoading(true);
+      const duplicated = await api.duplicateForm(formId);
+      setForms([duplicated, ...forms]);
+      showToast(`Form duplicated as draft: "${duplicated.title}"`);
+    } catch (err) {
+      showToast(err.message || "Failed to duplicate form", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedResponseIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to permanently delete the ${selectedResponseIds.length} selected responses?`)) return;
     try {
       setLoadingResponses(true);
-      const data = await api.getResponses(formObj.id);
-      setResponses(data);
+      const result = await api.bulkDeleteResponses(viewingResponsesFor.id, selectedResponseIds);
+      showToast(`${result.deleted_count} responses deleted successfully.`);
+      setSelectedResponseIds([]);
+      fetchResponsesWithFilters(1);
+      fetchAnalytics();
+      fetchAuditLogs();
     } catch (err) {
-      showToast(err.message || "Failed to load form responses", "error");
+      showToast(err.message || "Failed to bulk delete responses", "error");
     } finally {
       setLoadingResponses(false);
     }
+  };
+
+  const handleSaveRetention = async (e) => {
+    e.preventDefault();
+    try {
+      setSavingRetention(true);
+      const val = retentionDays === "" ? "" : parseInt(retentionDays);
+      const res = await api.applyRetentionPolicy(viewingResponsesFor.id, val);
+      showToast(res.message || "Retention policy updated and applied.");
+      fetchForms();
+      fetchResponsesWithFilters(1);
+      fetchAnalytics();
+      fetchAuditLogs();
+    } catch (err) {
+      showToast(err.message || "Failed to update retention policy", "error");
+    } finally {
+      setSavingRetention(false);
+    }
+  };
+
+  const handleViewResponses = async (formObj) => {
+    setViewingResponsesFor(formObj);
+    setSelectedResponse(null);
+  };
+
+
+
+  const getFieldLabel = (fieldId) => {
+    if (!viewingResponsesFor) return `Field #${fieldId}`;
+    const f = viewingResponsesFor.fields?.find(x => String(x.id) === String(fieldId));
+    return f ? f.label : `Field #${fieldId}`;
+  };
+
+  const getFieldType = (fieldId) => {
+    if (!viewingResponsesFor) return "text";
+    const f = viewingResponsesFor.fields?.find(x => String(x.id) === String(fieldId));
+    return f ? f.field_type : "text";
+  };
+
+  // Helper to format values in the submissions view
+  const renderResponseValue = (fieldId, val) => {
+    const type = getFieldType(fieldId);
+    if (type === "rating") {
+      const starsCount = Number(val) || 0;
+      return "⭐".repeat(starsCount) || "No Rating";
+    }
+    if (type === "file" && val && (val.startsWith("http://") || val.startsWith("https://"))) {
+      const displayFilename = val.split("/").pop().replace(/^[a-f0-9]{32}_/, "");
+      return (
+        <a 
+          href={val} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          style={{ color: "var(--cyan)", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+          onClick={(e) => e.stopPropagation()} 
+        >
+          <FileUp size={12} /> {displayFilename}
+        </a>
+      );
+    }
+    if (Array.isArray(val)) {
+      return val.join(", ");
+    }
+    return String(val || "N/A");
+  };
+
+  const getFilterParams = () => {
+    const params = {};
+    if (search.trim()) params.search = search.trim();
+    if (statusFilter) params.status = statusFilter;
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+    if (filterFieldId && filterFieldValue.trim()) {
+      params[`field_${filterFieldId}`] = filterFieldValue.trim();
+    }
+    return params;
   };
 
   const handleExportCSV = async (formId) => {
@@ -125,7 +340,8 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
       if (token) {
         headers["Authorization"] = `Token ${token}`;
       }
-      const csvUrl = api.exportCSVUrl(formId);
+      const params = getFilterParams();
+      const csvUrl = api.exportCSVUrl(formId, params);
       const response = await fetch(csvUrl, { headers });
       if (!response.ok) {
         if (response.status === 403) {
@@ -148,44 +364,35 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
     }
   };
 
-  const getFieldLabel = (fieldId) => {
-    if (!viewingResponsesFor) return `Field #${fieldId}`;
-    const f = viewingResponsesFor.fields?.find(x => String(x.id) === String(fieldId));
-    return f ? f.label : `Field #${fieldId}`;
-  };
-
-  const getFieldType = (fieldId) => {
-    if (!viewingResponsesFor) return "text";
-    const f = viewingResponsesFor.fields?.find(x => String(x.id) === String(fieldId));
-    return f ? f.field_type : "text";
-  };
-
-  // Helper to format values in the submissions view
-  const renderResponseValue = (fieldId, val) => {
-    const type = getFieldType(fieldId);
-    if (type === "rating") {
-      const starsCount = Number(val) || 0;
-      return "⭐".repeat(starsCount) || "No Rating";
+  const handleExportJSON = async (formId) => {
+    try {
+      const token = localStorage.getItem("token");
+      const headers = {};
+      if (token) {
+        headers["Authorization"] = `Token ${token}`;
+      }
+      const params = getFilterParams();
+      const jsonUrl = api.exportJSONUrl(formId, params);
+      const response = await fetch(jsonUrl, { headers });
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error("You do not have permission to view responses for this form.");
+        }
+        throw new Error("Failed to export responses.");
+      }
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.setAttribute("download", `form_${formId}_responses.json`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+      showToast("JSON Export downloaded successfully");
+    } catch (err) {
+      showToast(err.message || "Failed to export JSON", "error");
     }
-    if (type === "file" && val && (val.startsWith("http://") || val.startsWith("https://"))) {
-      // Clean up UUID prefixes if visible
-      const displayFilename = val.split("/").pop().replace(/^[a-f0-9]{32}_/, "");
-      return (
-        <a 
-          href={val} 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          style={{ color: "var(--primary)", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
-          onClick={(e) => e.stopPropagation()} // Prevent row click
-        >
-          <FileUp size={12} /> {displayFilename}
-        </a>
-      );
-    }
-    if (Array.isArray(val)) {
-      return val.join(", ");
-    }
-    return String(val || "N/A");
   };
 
   if (loading) {
@@ -196,11 +403,12 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
     );
   }
 
-  // --- RENDERING SUBMISSIONS SUBVIEW ---
+  // --- RENDERING SUBMISSIONS & ADMIN DASHBOARD SUBVIEW ---
   if (viewingResponsesFor) {
     return (
       <div className="fade-in">
-        <div className="dashboard-header" style={{ marginBottom: "1.5rem" }}>
+        {/* Navigation / Header */}
+        <div className="dashboard-header" style={{ marginBottom: "1.25rem" }}>
           <div className="dashboard-title">
             <button 
               className="btn btn-secondary" 
@@ -209,141 +417,593 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
             >
               <ArrowLeft size={14} /> Back to Forms
             </button>
-            <h2>Submissions for "{viewingResponsesFor.title}"</h2>
-            <p>Analyze response metrics and export submission spreadsheets</p>
-          </div>
-          
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end" }}>
-            <button 
-              className="btn btn-primary" 
-              style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
-              onClick={() => handleExportCSV(viewingResponsesFor.id)}
-              disabled={responses.length === 0}
-            >
-              <Download size={14} /> Export CSV
-            </button>
+            <h2>Admin Console: "{viewingResponsesFor.title}"</h2>
+            <p>Monitor analytics, export data, configure retention, and browse submission databases</p>
           </div>
         </div>
 
-        <div className="stats-panel" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-          <div className="glass-card" style={{ padding: "1.25rem", textAlign: "center" }}>
-            <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Total Responses</div>
-            <div style={{ fontSize: "2rem", fontWeight: "700", color: "var(--primary)", marginTop: "0.25rem" }}>
-              {responses.length}
-            </div>
-          </div>
-          <div className="glass-card" style={{ padding: "1.25rem", textAlign: "center" }}>
-            <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Form Status</div>
-            <div style={{ fontSize: "1.2rem", fontWeight: "700", marginTop: "0.5rem" }}>
-              <span className={`badge badge-${viewingResponsesFor.status.toLowerCase()}`}>
-                {viewingResponsesFor.status}
-              </span>
-            </div>
-          </div>
+        {/* Floating Admin Tabs Bar */}
+        <div className="glass-card" style={{ padding: "0.4rem", display: "flex", gap: "0.5rem", marginBottom: "1.5rem", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.06)" }}>
+          <button 
+            className={`btn ${activeTab === "responses" ? "btn-primary" : "btn-secondary"}`} 
+            style={{ flex: 1, padding: "0.5rem", fontSize: "0.8rem" }}
+            onClick={() => setActiveTab("responses")}
+          >
+            📝 Responses Browser
+          </button>
+          <button 
+            className={`btn ${activeTab === "analytics" ? "btn-primary" : "btn-secondary"}`} 
+            style={{ flex: 1, padding: "0.5rem", fontSize: "0.8rem" }}
+            onClick={() => setActiveTab("analytics")}
+          >
+            📊 Real-time Analytics
+          </button>
+          <button 
+            className={`btn ${activeTab === "rules" ? "btn-primary" : "btn-secondary"}`} 
+            style={{ flex: 1, padding: "0.5rem", fontSize: "0.8rem" }}
+            onClick={() => setActiveTab("rules")}
+          >
+            🔀 Conditional Rules Flow
+          </button>
+          <button 
+            className={`btn ${activeTab === "settings" ? "btn-primary" : "btn-secondary"}`} 
+            style={{ flex: 1, padding: "0.5rem", fontSize: "0.8rem" }}
+            onClick={() => setActiveTab("settings")}
+          >
+            ⚙️ Data Retention
+          </button>
+          <button 
+            className={`btn ${activeTab === "audit" ? "btn-primary" : "btn-secondary"}`} 
+            style={{ flex: 1, padding: "0.5rem", fontSize: "0.8rem" }}
+            onClick={() => setActiveTab("audit")}
+          >
+            📋 System Audit Logs
+          </button>
         </div>
 
-        {loadingResponses ? (
-          <div style={{ display: "flex", justifyContent: "center", padding: "3rem" }}>
-            <Loader size={24} className="animate-spin text-indigo-500" style={{ animation: "spin 1s linear infinite" }} />
-          </div>
-        ) : responses.length === 0 ? (
-          <div className="empty-dashboard" style={{ padding: "3rem 1.5rem" }}>
-            <MessageSquare size={36} style={{ opacity: 0.3, marginBottom: "0.5rem" }} />
-            <h3>No responses logged yet</h3>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-              Share your public URL to start gathering dynamic submissions.
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: selectedResponse ? "1.5fr 1fr" : "1fr", gap: "1.5rem", alignItems: "start" }}>
-            
-            {/* SUBMITTED USERS LIST TABLE */}
-            <div className="glass-card" style={{ padding: "1rem", overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-                    <th style={{ padding: "0.75rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>Response ID</th>
-                    <th style={{ padding: "0.75rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>Name</th>
-                    <th style={{ padding: "0.75rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>Email</th>
-                    <th style={{ padding: "0.75rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>Submission Time</th>
-                    <th style={{ padding: "0.75rem", textAlign: "right" }}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {responses.map((resp) => {
-                    const isSelected = selectedResponse && selectedResponse.id === resp.id;
-                    return (
-                      <tr 
-                        key={resp.id} 
-                        style={{ 
-                          borderBottom: "1px solid var(--border-color)", 
-                          cursor: "pointer",
-                          backgroundColor: isSelected ? "rgba(79, 70, 229, 0.08)" : "transparent"
-                        }}
-                        onClick={() => setSelectedResponse(resp)}
-                      >
-                        <td style={{ padding: "0.85rem 0.75rem", fontWeight: "600", color: "var(--primary)" }}>{resp.response_id || `RESP-${resp.id}`}</td>
-                        <td style={{ padding: "0.85rem 0.75rem", fontWeight: "600", color: "var(--text-main)" }}>{resp.name}</td>
-                        <td style={{ padding: "0.85rem 0.75rem", color: "var(--text-main)" }}>{resp.email}</td>
-                        <td style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.85rem" }}>
-                          {new Date(resp.submitted_at).toLocaleString()}
-                        </td>
-                        <td style={{ padding: "0.85rem 0.75rem", textAlign: "right" }}>
-                          <button className="btn btn-secondary" style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}>
-                            View Details
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* DETAILS PANEL DRAWER */}
-            {selectedResponse && (
-              <div className="glass-card fade-in" style={{ padding: "1.25rem", borderLeft: "3px solid var(--primary)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-                  <h4 style={{ fontFamily: "var(--font-display)", fontWeight: "700" }}>Submission Details</h4>
-                  <button 
-                    className="btn btn-secondary btn-icon" 
-                    style={{ width: "24px", height: "24px", padding: 0 }}
-                    onClick={() => setSelectedResponse(null)}
+        {/* TAB 1: RESPONSES BROWSER */}
+        {activeTab === "responses" && (
+          <div className="fade-in">
+            {/* Filter controls panel */}
+            <div className="glass-card" style={{ padding: "1.25rem", marginBottom: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem" }}>
+                <div>
+                  <label className="form-label" style={{ fontSize: "0.7rem" }}>Search submissions</label>
+                  <input 
+                    type="text" 
+                    placeholder="Search response value..." 
+                    className="form-control" 
+                    value={search} 
+                    onChange={e => setSearch(e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label className="form-label" style={{ fontSize: "0.7rem" }}>Status</label>
+                  <select 
+                    className="form-control" 
+                    value={statusFilter} 
+                    onChange={e => setStatusFilter(e.target.value)}
                   >
-                    &times;
+                    <option value="">All Statuses</option>
+                    <option value="Completed">Completed Only</option>
+                    <option value="Started">Incomplete / Started</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label" style={{ fontSize: "0.7rem" }}>From Date</label>
+                  <input 
+                    type="date" 
+                    className="form-control" 
+                    value={startDate} 
+                    onChange={e => setStartDate(e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label className="form-label" style={{ fontSize: "0.7rem" }}>To Date</label>
+                  <input 
+                    type="date" 
+                    className="form-control" 
+                    value={endDate} 
+                    onChange={e => setEndDate(e.target.value)} 
+                  />
+                </div>
+              </div>
+
+              {/* Advanced Field-Value Filter */}
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+                <div style={{ minWidth: "200px" }}>
+                  <label className="form-label" style={{ fontSize: "0.7rem" }}>Filter by Specific Field</label>
+                  <select 
+                    className="form-control" 
+                    value={filterFieldId} 
+                    onChange={e => {
+                      setFilterFieldId(e.target.value);
+                      setFilterFieldValue("");
+                    }}
+                  >
+                    <option value="">Choose field...</option>
+                    {viewingResponsesFor.fields?.map(f => (
+                      <option key={f.id} value={f.id}>{f.label} ({f.field_type})</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ flexGrow: 1, minWidth: "200px" }}>
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    placeholder="Enter search value to filter field..." 
+                    value={filterFieldValue} 
+                    onChange={e => setFilterFieldValue(e.target.value)}
+                    disabled={!filterFieldId}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ padding: "0.55rem 1rem", fontSize: "0.8rem" }}
+                    onClick={() => {
+                      setSearch("");
+                      setStatusFilter("");
+                      setStartDate("");
+                      setEndDate("");
+                      setFilterFieldId("");
+                      setFilterFieldValue("");
+                      setSelectedResponseIds([]);
+                    }}
+                  >
+                    Reset Filters
+                  </button>
+                  <button 
+                    className="btn btn-primary" 
+                    style={{ padding: "0.55rem 1rem", fontSize: "0.8rem" }}
+                    onClick={() => handleExportCSV(viewingResponsesFor.id)}
+                  >
+                    <Download size={14} /> Export CSV
+                  </button>
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ padding: "0.55rem 1rem", fontSize: "0.8rem" }}
+                    onClick={() => handleExportJSON(viewingResponsesFor.id)}
+                  >
+                    <Download size={14} /> Export JSON
                   </button>
                 </div>
-                
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                   <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                     <strong>ID:</strong> {selectedResponse.response_id || `RESP-${selectedResponse.id}`} | Submitted: {new Date(selectedResponse.submitted_at).toLocaleString()} (v{selectedResponse.version})
-                   </div>
-                  
-                  <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "0.75rem" }}>
-                    <div style={{ fontWeight: "600", fontSize: "0.9rem", color: "var(--text-main)" }}>Submitter Info</div>
-                    <div style={{ marginTop: "0.25rem", fontSize: "0.85rem" }}>
-                      <strong>Name:</strong> {selectedResponse.name}<br/>
-                      <strong>Email:</strong> {selectedResponse.email}
-                    </div>
-                  </div>
+              </div>
+            </div>
 
-                  <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "0.75rem" }}>
-                    <div style={{ fontWeight: "600", fontSize: "0.9rem", color: "var(--text-main)", marginBottom: "0.5rem" }}>Response Breakdown</div>
-                    {Object.entries(selectedResponse.submitted_data).map(([fieldId, value]) => (
-                      <div key={fieldId} style={{ marginBottom: "0.75rem" }}>
-                        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                          {getFieldLabel(fieldId)}
-                        </div>
-                        <div style={{ fontSize: "0.9rem", fontWeight: "500", marginTop: "0.1rem", color: "var(--text-main)" }}>
-                          {renderResponseValue(fieldId, value)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+            {/* Bulk actions bar */}
+            {selectedResponseIds.length > 0 && (
+              <div className="glass-card fade-in" style={{ padding: "0.75rem 1.25rem", marginBottom: "1.25rem", display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: "rgba(239, 68, 68, 0.35)", background: "rgba(239, 68, 68, 0.05)" }}>
+                <span style={{ fontSize: "0.85rem", fontWeight: "600" }}>
+                  Selected {selectedResponseIds.length} response(s) for bulk action
+                </span>
+                <button className="btn btn-danger" onClick={handleBulkDelete} style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}>
+                  <Trash2 size={13} /> Delete Selected Responses
+                </button>
               </div>
             )}
 
+            {/* Response table & details split screen */}
+            {loadingResponses ? (
+              <div style={{ display: "flex", justifyContent: "center", padding: "3rem" }}>
+                <Loader size={24} className="animate-spin text-indigo-500" style={{ animation: "spin 1s linear infinite" }} />
+              </div>
+            ) : responses.length === 0 ? (
+              <div className="empty-dashboard" style={{ padding: "3rem 1.5rem" }}>
+                <MessageSquare size={36} style={{ opacity: 0.3, marginBottom: "0.5rem" }} />
+                <h3>No responses match search filters</h3>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                  Adjust your search keyword or selected date/field configurations.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: selectedResponse ? "1.4fr 1fr" : "1fr", gap: "1.5rem", alignItems: "start" }}>
+                
+                {/* SUBMISSIONS LIST TABLE */}
+                <div className="glass-card" style={{ padding: "0", overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--border-color)" }}>
+                        <th style={{ padding: "0.85rem 0.75rem", width: "40px", textAlign: "center" }}>
+                          <input 
+                            type="checkbox" 
+                            checked={responses.length > 0 && selectedResponseIds.length === responses.length}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedResponseIds(responses.map(r => r.id));
+                              } else {
+                                setSelectedResponseIds([]);
+                              }
+                            }}
+                          />
+                        </th>
+                        <th style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.75rem", textTransform: "uppercase" }}>Response ID</th>
+                        <th style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.75rem", textTransform: "uppercase" }}>Submitter Name</th>
+                        <th style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.75rem", textTransform: "uppercase" }}>Email</th>
+                        <th style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.75rem", textTransform: "uppercase" }}>Status</th>
+                        <th style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.75rem", textTransform: "uppercase" }}>Submitted Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {responses.map((resp) => {
+                        const isSelected = selectedResponse && selectedResponse.id === resp.id;
+                        return (
+                          <tr 
+                            key={resp.id} 
+                            style={{ 
+                              borderBottom: "1px solid var(--border-color)", 
+                              cursor: "pointer",
+                              backgroundColor: isSelected ? "rgba(34, 211, 238, 0.08)" : "transparent"
+                            }}
+                            onClick={() => setSelectedResponse(resp)}
+                          >
+                            <td style={{ padding: "0.85rem 0.75rem", textAlign: "center" }} onClick={e => e.stopPropagation()}>
+                              <input 
+                                type="checkbox" 
+                                checked={selectedResponseIds.includes(resp.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedResponseIds([...selectedResponseIds, resp.id]);
+                                  } else {
+                                    setSelectedResponseIds(selectedResponseIds.filter(id => id !== resp.id));
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td style={{ padding: "0.85rem 0.75rem", fontWeight: "700", color: "var(--cyan)" }}>
+                              {resp.response_id}
+                            </td>
+                            <td style={{ padding: "0.85rem 0.75rem", fontWeight: "600", color: "var(--text-main)" }}>
+                              {resp.name}
+                            </td>
+                            <td style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)" }}>
+                              {resp.email}
+                            </td>
+                            <td style={{ padding: "0.85rem 0.75rem" }}>
+                              <span className={`badge ${resp.status === 'Completed' ? 'badge-published' : 'badge-draft'}`}>
+                                {resp.status}
+                              </span>
+                            </td>
+                            <td style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                              {new Date(resp.submitted_at).toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  
+                  {/* Pagination control */}
+                  {totalPages > 1 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem", borderTop: "1px solid var(--border-color)" }}>
+                      <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                        Showing Page {currentPage} of {totalPages} ({totalCount} total submissions)
+                      </span>
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ padding: "0.35rem 0.75rem", fontSize: "0.78rem" }}
+                          disabled={currentPage <= 1}
+                          onClick={() => fetchResponsesWithFilters(currentPage - 1)}
+                        >
+                          Previous
+                        </button>
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ padding: "0.35rem 0.75rem", fontSize: "0.78rem" }}
+                          disabled={currentPage >= totalPages}
+                          onClick={() => fetchResponsesWithFilters(currentPage + 1)}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* DETAILS PANEL DRAWER */}
+                {selectedResponse && (
+                  <div className="glass-card fade-in" style={{ padding: "1.25rem", borderLeft: "3px solid var(--cyan)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
+                      <h4 style={{ fontFamily: "var(--font-display)", fontWeight: "800", color: "var(--text-main)" }}>Submission Details</h4>
+                      <button 
+                        className="btn btn-secondary btn-icon" 
+                        style={{ width: "24px", height: "24px", padding: 0, borderRadius: "50%" }}
+                        onClick={() => setSelectedResponse(null)}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                    
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+                      <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", background: "rgba(255,255,255,0.02)", padding: "0.5rem", borderRadius: "6px" }}>
+                        <strong>Response ID:</strong> {selectedResponse.response_id}<br/>
+                        <strong>Status:</strong> {selectedResponse.status}<br/>
+                        <strong>Date:</strong> {new Date(selectedResponse.submitted_at).toLocaleString()}<br/>
+                        {selectedResponse.completion_time && (
+                          <span><strong>Time to Complete:</strong> {selectedResponse.completion_time}s (v{selectedResponse.version})</span>
+                        )}
+                      </div>
+                      
+                      <div>
+                        <div style={{ fontWeight: "700", fontSize: "0.82rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Submitter Info</div>
+                        <div style={{ marginTop: "0.25rem", fontSize: "0.85rem" }}>
+                          <strong>Name:</strong> {selectedResponse.name}<br/>
+                          <strong>Email:</strong> {selectedResponse.email}
+                        </div>
+                      </div>
+
+                      <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "0.75rem" }}>
+                        <div style={{ fontWeight: "700", fontSize: "0.82rem", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "0.5rem" }}>Responses</div>
+                        {Object.entries(selectedResponse.submitted_data).map(([fieldId, value]) => (
+                          <div key={fieldId} style={{ marginBottom: "0.75rem" }}>
+                            <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: "600" }}>
+                              {getFieldLabel(fieldId)}
+                            </div>
+                            <div style={{ fontSize: "0.88rem", fontWeight: "600", marginTop: "0.15rem", color: "var(--text-main)" }}>
+                              {renderResponseValue(fieldId, value)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: ANALYTICS */}
+        {activeTab === "analytics" && (
+          <div className="fade-in">
+            {loadingAnalytics ? (
+              <div style={{ display: "flex", justifyContent: "center", padding: "4rem" }}>
+                <Loader size={32} className="animate-spin text-indigo-500" style={{ animation: "spin 1s linear infinite" }} />
+              </div>
+            ) : !analytics || analytics.total_submissions === 0 ? (
+              <div className="empty-dashboard" style={{ padding: "4rem 2rem" }}>
+                <BarChart3 size={40} style={{ opacity: 0.3, marginBottom: "0.5rem" }} />
+                <h3>No responses yet</h3>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                  Submit data using the public responder link to display live chart aggregations.
+                </p>
+              </div>
+            ) : (
+              <div>
+                {/* Metrics Summary cards */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+                  <div className="glass-card" style={{ padding: "1.25rem", borderLeft: "3.5px solid var(--primary-indigo)" }}>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: "700", textTransform: "uppercase" }}>Started Funnel</div>
+                    <div style={{ fontSize: "2rem", fontWeight: "800", marginTop: "0.25rem", color: "white" }}>
+                      {analytics.started_submissions}
+                    </div>
+                  </div>
+                  <div className="glass-card" style={{ padding: "1.25rem", borderLeft: "3.5px solid var(--cyan)" }}>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: "700", textTransform: "uppercase" }}>Completed Forms</div>
+                    <div style={{ fontSize: "2rem", fontWeight: "800", marginTop: "0.25rem", color: "white" }}>
+                      {analytics.completed_submissions}
+                    </div>
+                  </div>
+                  <div className="glass-card" style={{ padding: "1.25rem", borderLeft: "3.5px solid var(--violet)" }}>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: "700", textTransform: "uppercase" }}>Completion Rate</div>
+                    <div style={{ fontSize: "2rem", fontWeight: "800", marginTop: "0.25rem", color: "white" }}>
+                      {analytics.completion_rate}%
+                    </div>
+                  </div>
+                  <div className="glass-card" style={{ padding: "1.25rem", borderLeft: "3.5px solid var(--emerald)" }}>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: "700", textTransform: "uppercase" }}>Avg Completion Time</div>
+                    <div style={{ fontSize: "2rem", fontWeight: "800", marginTop: "0.25rem", color: "white" }}>
+                      {analytics.average_completion_time}s
+                    </div>
+                  </div>
+                </div>
+
+                {/* Primary Trend Charts */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: "1.5rem", marginBottom: "2rem" }}>
+                  {/* Trend Line Chart */}
+                  <div className="glass-card" style={{ padding: "1.25rem" }}>
+                    <h3 style={{ fontFamily: "var(--font-display)", fontWeight: "800", fontSize: "1rem", marginBottom: "1rem" }}>Response Submissions over Time</h3>
+                    <div style={{ width: "100%", height: 260 }}>
+                      <ResponsiveContainer>
+                        <LineChart data={analytics.daily_submissions}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                          <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={10} />
+                          <YAxis stroke="var(--text-muted)" fontSize={10} allowDecimals={false} />
+                          <ChartTooltip contentStyle={{ background: "rgba(15,23,42,0.85)", borderColor: "rgba(255,255,255,0.12)" }} />
+                          <Line type="monotone" dataKey="count" name="Submissions" stroke="var(--cyan)" strokeWidth={2.5} activeDot={{ r: 6 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Started vs Completed Funnel Chart */}
+                  <div className="glass-card" style={{ padding: "1.25rem" }}>
+                    <h3 style={{ fontFamily: "var(--font-display)", fontWeight: "800", fontSize: "1rem", marginBottom: "1rem" }}>Completion Funnel</h3>
+                    <div style={{ width: "100%", height: 260 }}>
+                      <ResponsiveContainer>
+                        <BarChart data={[
+                          { name: "Started", count: analytics.started_submissions, fill: "var(--primary-indigo)" },
+                          { name: "Completed", count: analytics.completed_submissions, fill: "var(--cyan)" }
+                        ]}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                          <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={11} />
+                          <YAxis stroke="var(--text-muted)" fontSize={11} allowDecimals={false} />
+                          <ChartTooltip contentStyle={{ background: "rgba(15,23,42,0.85)", borderColor: "rgba(255,255,255,0.12)" }} />
+                          <Bar dataKey="count" name="Count" radius={[6, 6, 0, 0]}>
+                            {
+                              [
+                                <Cell key="started" fill="rgba(99, 102, 241, 0.75)" stroke="var(--primary-indigo)" strokeWidth={1.5} />,
+                                <Cell key="completed" fill="rgba(34, 211, 238, 0.75)" stroke="var(--cyan)" strokeWidth={1.5} />
+                              ]
+                            }
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Per-field Distributions Grid */}
+                <h3 style={{ fontFamily: "var(--font-display)", fontWeight: "800", fontSize: "1.2rem", marginBottom: "1rem", color: "var(--text-main)" }}>Categorical Field Distributions</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: "1.5rem" }}>
+                  {Object.entries(analytics.field_distributions).map(([label, dist]) => {
+                    const chartData = Object.entries(dist).map(([key, val]) => ({ name: key, count: val }));
+                    return (
+                      <div className="glass-card" key={label} style={{ padding: "1.25rem" }}>
+                        <h4 style={{ fontSize: "0.95rem", fontWeight: "700", marginBottom: "0.85rem" }}>{label}</h4>
+                        <div style={{ width: "100%", height: 200 }}>
+                          <ResponsiveContainer>
+                            <BarChart data={chartData}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                              <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={10} />
+                              <YAxis stroke="var(--text-muted)" fontSize={10} allowDecimals={false} />
+                              <ChartTooltip contentStyle={{ background: "rgba(15,23,42,0.85)", borderColor: "rgba(255,255,255,0.10)" }} />
+                              <Bar dataKey="count" name="Responses" fill="rgba(139, 92, 246, 0.65)" stroke="var(--violet)" strokeWidth={1} radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: CONDITIONAL RULES VISUALIZER */}
+        {activeTab === "rules" && (
+          <div className="fade-in">
+            {loadingRules ? (
+              <div style={{ display: "flex", justifyContent: "center", padding: "4rem" }}>
+                <Loader size={32} className="animate-spin text-indigo-500" style={{ animation: "spin 1s linear infinite" }} />
+              </div>
+            ) : rules.length === 0 ? (
+              <div className="empty-dashboard" style={{ padding: "4rem 2rem" }}>
+                <ShieldAlert size={40} style={{ opacity: 0.3, marginBottom: "0.5rem" }} />
+                <h3>No conditional rules configured</h3>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                  Configure conditional logic inside the low-code builder to hide/show fields dynamically.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                {rules.map((rule, idx) => (
+                  <div key={rule.id || idx} className="glass-card" style={{ padding: "1.1rem 1.5rem", display: "flex", alignItems: "center", gap: "1.5rem", flexWrap: "wrap", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(15,23,42,0.30)" }}>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <span className="badge badge-draft" style={{ alignSelf: "flex-start", marginBottom: "0.25rem" }}>Trigger Node</span>
+                      <strong style={{ color: "white" }}>{rule.trigger_field_label || getFieldLabel(rule.trigger_field_id)}</strong>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--cyan)", fontWeight: "600", fontSize: "0.9rem" }}>
+                      <span style={{ border: "1px solid rgba(34,211,238,0.25)", padding: "0.15rem 0.5rem", borderRadius: "6px", fontSize: "0.75rem", background: "rgba(34,211,238,0.05)", textTransform: "uppercase" }}>
+                        {rule.operator}
+                      </span>
+                      <span>"{rule.comparison_value || "Empty"}"</span>
+                      <span style={{ fontSize: "1.1rem" }}>&rarr;</span>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <span className="badge badge-published" style={{ alignSelf: "flex-start", marginBottom: "0.25rem", background: "rgba(16,185,129,0.08)", color: "#34d399" }}>
+                        {rule.action.toUpperCase()} Action
+                      </span>
+                      <strong style={{ color: "white" }}>{rule.target_field_label || getFieldLabel(rule.target_field_id)}</strong>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 4: RETENTION SETTINGS */}
+        {activeTab === "settings" && (
+          <div className="fade-in" style={{ maxWidth: "600px", margin: "0 auto" }}>
+            <div className="glass-card" style={{ padding: "2rem" }}>
+              <h3 style={{ fontFamily: "var(--font-display)", fontWeight: "800", fontSize: "1.25rem", marginBottom: "0.5rem" }}>
+                Response Retention Policy
+              </h3>
+              <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "1.5rem", lineHeight: "1.45" }}>
+                Configure automatic data retention rules for this form. Responses older than the configured days will be safely archived and hidden from responder lists.
+              </p>
+
+              <form onSubmit={handleSaveRetention}>
+                <div className="form-group" style={{ marginBottom: "1.5rem" }}>
+                  <label className="form-label">Auto-Archive After (Days)</label>
+                  <select 
+                    className="form-control" 
+                    value={retentionDays} 
+                    onChange={e => setRetentionDays(e.target.value)}
+                  >
+                    <option value="">No Retention Policy (Keep Indefinitely)</option>
+                    <option value="30">30 Days</option>
+                    <option value="60">60 Days</option>
+                    <option value="90">90 Days</option>
+                  </select>
+                </div>
+                
+                <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary"
+                    disabled={savingRetention}
+                  >
+                    {savingRetention ? "Saving..." : "Apply Retention Configuration"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: AUDIT LOGS */}
+        {activeTab === "audit" && (
+          <div className="fade-in">
+            {loadingAudit ? (
+              <div style={{ display: "flex", justifyContent: "center", padding: "4rem" }}>
+                <Loader size={32} className="animate-spin text-indigo-500" style={{ animation: "spin 1s linear infinite" }} />
+              </div>
+            ) : auditLogs.length === 0 ? (
+              <div className="empty-dashboard" style={{ padding: "4rem 2rem" }}>
+                <Settings size={40} style={{ opacity: 0.3, marginBottom: "0.5rem" }} />
+                <h3>No audit events logged</h3>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                  Important administrative tasks like duplication or deletion will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="glass-card" style={{ padding: "0", overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border-color)" }}>
+                      <th style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.75rem", textTransform: "uppercase" }}>User</th>
+                      <th style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.75rem", textTransform: "uppercase" }}>Action Type</th>
+                      <th style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.75rem", textTransform: "uppercase" }}>Target Object</th>
+                      <th style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.75rem", textTransform: "uppercase" }}>Timestamp</th>
+                      <th style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.75rem", textTransform: "uppercase" }}>Metadata Context</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.map((log) => (
+                      <tr key={log.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
+                        <td style={{ padding: "0.85rem 0.75rem", fontWeight: "600", color: "white" }}>{log.username}</td>
+                        <td style={{ padding: "0.85rem 0.75rem" }}>
+                          <span className="type-tag">{log.action}</span>
+                        </td>
+                        <td style={{ padding: "0.85rem 0.75rem", color: "var(--text-main)" }}>{log.target}</td>
+                        <td style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                          {new Date(log.timestamp).toLocaleString()}
+                        </td>
+                        <td style={{ padding: "0.85rem 0.75rem", color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                          {JSON.stringify(log.context)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -427,6 +1087,14 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
                     >
                       <Edit2 size={13} style={{ color: "var(--text-muted)" }} />
                     </button>
+                    {/* Form Duplication action added */}
+                    <button 
+                      className="btn btn-secondary btn-icon" 
+                      onClick={() => handleDuplicateForm(form.id)}
+                      title="Duplicate Form Schema"
+                    >
+                      <Copy size={13} style={{ color: "var(--text-muted)" }} />
+                    </button>
                     {isPublished ? (
                       <>
                         <button 
@@ -434,7 +1102,7 @@ function Dashboard({ onEditForm, onViewPreview, showToast }) {
                           onClick={() => copyShareLink(form.share_slug)}
                           title="Copy Public URL"
                         >
-                          <Copy size={13} style={{ color: "var(--text-muted)" }} />
+                          <Globe size={13} style={{ color: "var(--text-muted)" }} />
                         </button>
                         <button 
                           className="btn btn-secondary btn-icon" 

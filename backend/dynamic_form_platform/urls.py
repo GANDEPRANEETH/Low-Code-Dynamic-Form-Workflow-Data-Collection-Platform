@@ -28,7 +28,13 @@ urlpatterns = [
     
     # Form Submissions and Export
     path('api/forms/<int:form_id>/responses', forms_views.get_responses),
+    path('api/forms/<int:form_id>/responses/bulk-delete', forms_views.bulk_delete_responses),
     path('api/forms/<int:form_id>/export', forms_views.export_responses),
+    path('api/forms/<int:form_id>/export/json', forms_views.export_responses_json),
+    path('api/forms/<int:form_id>/analytics', forms_views.get_analytics),
+    path('api/forms/<int:form_id>/duplicate', forms_views.duplicate_form),
+    path('api/forms/<int:form_id>/retention', forms_views.apply_retention_policy),
+    path('api/audit-logs', forms_views.get_audit_logs),
     
     # Fields CRUD (Builder)
     path('api/forms/<int:form_id>/fields', builder_views.add_field),

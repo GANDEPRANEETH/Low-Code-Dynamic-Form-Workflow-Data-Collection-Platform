@@ -32,9 +32,10 @@ class FormSerializer(serializers.ModelSerializer):
         model = Form
         fields = [
             'id', 'owner', 'title', 'description', 'status', 
-            'current_version', 'share_slug', 'created_at', 'updated_at', 'fields'
+            'current_version', 'share_slug', 'created_at', 'updated_at', 'fields',
+            'started_count', 'retention_days'
         ]
-        read_only_fields = ['id', 'owner', 'status', 'current_version', 'share_slug', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'owner', 'status', 'current_version', 'share_slug', 'created_at', 'updated_at', 'started_count']
 
     def get_form_fields(self, obj):
         ordered_fields = obj.fields.all().order_by('display_order')

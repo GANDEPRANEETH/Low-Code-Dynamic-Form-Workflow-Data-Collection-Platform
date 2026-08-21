@@ -322,3 +322,92 @@ class Module2TestCase(TestCase):
             
             # Verify no Submission record was committed to the DB
             self.assertFalse(Submission.objects.filter(form=self.form).exists())
+
+    def test_milestone3_features(self):
+        # 1. Login user to get auth token
+        self.client.login(username='testuser', password='testpassword')
+        
+        # 2. Test Form Duplication
+        response = self.client.post(f'/api/forms/{self.form.id}/duplicate')
+        self.assertEqual(response.status_code, 201)
+        dup_data = response.json()
+        self.assertIn("Copy of", dup_data['title'])
+        self.assertEqual(dup_data['status'], 'Draft')
+        
+        # Verify fields and rules were duplicated
+        dup_form = Form.objects.get(id=dup_data['id'])
+        self.assertEqual(dup_form.fields.count(), self.form.fields.count())
+        self.assertEqual(dup_form.conditional_rules.count(), self.form.conditional_rules.count())
+
+        # 3. Test Analytics (initial state)
+        response = self.client.get(f'/api/forms/{self.form.id}/analytics')
+        self.assertEqual(response.status_code, 200)
+        analytics_data = response.json()
+        self.assertEqual(analytics_data['total_submissions'], 0)
+        self.assertEqual(analytics_data['started_submissions'], 0)
+        self.assertEqual(analytics_data['completion_rate'], 100.0)
+
+        # 4. Test Submission tracking
+        # Load form (simulates a view / started submission)
+        self.publish_form_helper()
+        response = self.client.get('/api/public/employment-survey')
+        self.assertEqual(response.status_code, 200)
+        resp_id = response.json().get('response_id')
+        self.assertIsNotNone(resp_id)
+        
+        # Submit response referencing response_id
+        payload = {
+            "response_id": resp_id,
+            "submitted_data": {
+                str(self.field_married.id): "No",
+                str(self.field_email.id): "submitter@email.com"
+            }
+        }
+        response = self.client.post('/api/public/employment-survey/submit', payload, content_type='application/json')
+        self.assertEqual(response.status_code, 201)
+        
+        # Load analytics again and verify
+        response = self.client.get(f'/api/forms/{self.form.id}/analytics')
+        self.assertEqual(response.status_code, 200)
+        analytics_data = response.json()
+        self.assertEqual(analytics_data['total_submissions'], 1)
+        self.assertEqual(analytics_data['started_submissions'], 1)
+        self.assertEqual(analytics_data['completion_rate'], 100.0)
+
+        # 5. Test exports
+        # CSV Export
+        response = self.client.get(f'/api/forms/{self.form.id}/export')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv')
+        
+        # JSON Export
+        response = self.client.get(f'/api/forms/{self.form.id}/export/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/json')
+        json_export = response.json()
+        self.assertEqual(len(json_export), 1)
+        self.assertEqual(json_export[0]['Response ID'], resp_id)
+
+        # 6. Test Retention Policy Configuration
+        payload = {"retention_days": 30}
+        response = self.client.post(f'/api/forms/{self.form.id}/retention', payload, content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['retention_days'], 30)
+
+        # 7. Test Bulk Response Deletion
+        submission = Submission.objects.get(response_id=resp_id)
+        payload = {"submission_ids": [submission.id]}
+        response = self.client.post(f'/api/forms/{self.form.id}/responses/bulk-delete', payload, content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['deleted_count'], 1)
+        self.assertFalse(Submission.objects.filter(id=submission.id).exists())
+
+        # 8. Test Audit Logs
+        response = self.client.get('/api/audit-logs')
+        self.assertEqual(response.status_code, 200)
+        logs = response.json()
+        self.assertTrue(len(logs) >= 3) # duplicated form, apply retention, bulk delete
+        actions = [log['action'] for log in logs]
+        self.assertIn("duplicate_form", actions)
+        self.assertIn("apply_retention_policy", actions)
+        self.assertIn("bulk_delete_responses", actions)

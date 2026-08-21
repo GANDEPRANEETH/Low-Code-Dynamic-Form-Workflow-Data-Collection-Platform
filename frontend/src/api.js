@@ -72,8 +72,35 @@ export const api = {
   deleteRule: (id) => request(`/api/rules/${id}`, { method: "DELETE" }),
 
   // Responses Submissions
-  getResponses: (formId) => request(`/api/forms/${formId}/responses`),
-  exportCSVUrl: (formId) => `${API_BASE}/api/forms/${formId}/export`,
+  getResponses: (formId, params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/api/forms/${formId}/responses${query ? `?${query}` : ""}`);
+  },
+  bulkDeleteResponses: (formId, submissionIds) => request(`/api/forms/${formId}/responses/bulk-delete`, {
+    method: "POST",
+    body: JSON.stringify({ submission_ids: submissionIds })
+  }),
+  exportCSVUrl: (formId, params = {}) => {
+    const token = localStorage.getItem("token");
+    const allParams = { ...params };
+    if (token) allParams.token = token;
+    const query = new URLSearchParams(allParams).toString();
+    return `${API_BASE}/api/forms/${formId}/export${query ? `?${query}` : ""}`;
+  },
+  exportJSONUrl: (formId, params = {}) => {
+    const token = localStorage.getItem("token");
+    const allParams = { ...params };
+    if (token) allParams.token = token;
+    const query = new URLSearchParams(allParams).toString();
+    return `${API_BASE}/api/forms/${formId}/export/json${query ? `?${query}` : ""}`;
+  },
+  getAnalytics: (formId) => request(`/api/forms/${formId}/analytics`),
+  duplicateForm: (formId) => request(`/api/forms/${formId}/duplicate`, { method: "POST" }),
+  applyRetentionPolicy: (formId, retentionDays) => request(`/api/forms/${formId}/retention`, {
+    method: "POST",
+    body: JSON.stringify({ retention_days: retentionDays })
+  }),
+  getAuditLogs: () => request("/api/audit-logs"),
 
   // Public Client
   getPublicForm: (slug) => request(`/api/public/${slug}`),

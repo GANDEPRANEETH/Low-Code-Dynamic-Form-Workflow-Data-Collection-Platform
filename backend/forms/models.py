@@ -16,6 +16,8 @@ class Form(models.Model):
     share_slug = models.CharField(max_length=100, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    started_count = models.IntegerField(default=0)
+    retention_days = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return self.title
@@ -80,6 +82,9 @@ class Submission(models.Model):
     form_version = models.ForeignKey(FormVersion, related_name='submissions', on_delete=models.SET_NULL, null=True)
     response_id = models.CharField(max_length=50, unique=True)
     submitted_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, default='Completed')  # Completed, Started
+    completion_time = models.IntegerField(null=True, blank=True)  # in seconds
+    is_archived = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Submission {self.response_id} to {self.form.title}"
@@ -100,3 +105,13 @@ class UploadedFileReference(models.Model):
 
     def __str__(self):
         return f"File {self.file_name} for field {self.field_id}"
+
+class AuditLog(models.Model):
+    user = models.ForeignKey(User, related_name='audit_logs', on_delete=models.SET_NULL, null=True, blank=True)
+    action = models.CharField(max_length=255)
+    target = models.CharField(max_length=255, blank=True, null=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    context = models.JSONField(default=dict, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.user.username if self.user else 'System'} - {self.action} on {self.target} at {self.timestamp}"

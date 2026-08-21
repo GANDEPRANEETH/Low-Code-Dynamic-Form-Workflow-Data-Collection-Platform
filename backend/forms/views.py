@@ -1,5 +1,6 @@
 import csv
 from django.http import HttpResponse
+from django.db import models
 from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes
@@ -7,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.shortcuts import get_object_or_404
 
-from .models import Form, Response as FormResponse, Field, Submission
+from .models import Form, Response as FormResponse, Field, Submission, ResponseValue, UploadedFileReference, AuditLog, FormVersion
 from .serializers import FormSerializer, ResponseSerializer
 
 class FormViewSet(viewsets.ModelViewSet):
@@ -61,9 +62,52 @@ def get_responses(request, form_id):
             status=status.HTTP_403_FORBIDDEN
         )
 
+    # Automatically apply retention policy on load if configured
+    if form_obj.retention_days is not None:
+        from django.utils import timezone
+        cutoff_date = timezone.now() - timezone.timedelta(days=form_obj.retention_days)
+        form_obj.submissions.filter(submitted_at__lt=cutoff_date, is_archived=False).update(is_archived=True)
+
     submissions_qs = form_obj.submissions.all().order_by('-submitted_at')
+
+    # Apply filters
+    show_archived = request.GET.get('show_archived') == 'true'
+    if not show_archived:
+        submissions_qs = submissions_qs.filter(is_archived=False)
+
+    status_param = request.GET.get('status')
+    if status_param:
+        submissions_qs = submissions_qs.filter(status=status_param)
+
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    if start_date:
+        submissions_qs = submissions_qs.filter(submitted_at__date__gte=start_date)
+    if end_date:
+        submissions_qs = submissions_qs.filter(submitted_at__date__lte=end_date)
+
+    search_query = request.GET.get('search')
+    if search_query:
+        submissions_qs = submissions_qs.filter(values__value__icontains=search_query).distinct()
+
+    field_id_param = request.GET.get('field_id')
+    field_value_param = request.GET.get('field_value')
+    if field_id_param and field_value_param:
+        try:
+            fid = int(field_id_param)
+            submissions_qs = submissions_qs.filter(values__field_id=fid, values__value__icontains=field_value_param)
+        except ValueError:
+            pass
+
+    for key, value in request.GET.items():
+        if key.startswith('field_') and key != 'field_id' and key != 'field_value' and value:
+            try:
+                fid = int(key.replace('field_', ''))
+                submissions_qs = submissions_qs.filter(values__field_id=fid, values__value__icontains=value)
+            except ValueError:
+                pass
+
     results = []
-    
     fields = form_obj.fields.all()
     name_field_id = None
     email_field_id = None
@@ -76,7 +120,6 @@ def get_responses(request, form_id):
             email_field_id = str(f.id)
             
     for s in submissions_qs:
-        # Construct submitted_data on the fly
         data = {}
         for val in s.values.all():
             data[str(val.field_id)] = val.value
@@ -105,6 +148,15 @@ def get_responses(request, form_id):
                     email_val = val
                     break
 
+        # Attach file references list
+        file_refs = []
+        for f_ref in s.files.all():
+            file_refs.append({
+                "field_id": f_ref.field_id,
+                "file_name": f_ref.file_name,
+                "file_url": f_ref.file_url
+            })
+
         results.append({
             "id": s.id,
             "response_id": s.response_id,
@@ -112,10 +164,28 @@ def get_responses(request, form_id):
             "name": name_val or "Anonymous",
             "email": email_val or "N/A",
             "submitted_data": data,
-            "version": s.form_version.version if s.form_version else 1
+            "version": s.form_version.version if s.form_version else 1,
+            "status": s.status,
+            "completion_time": s.completion_time,
+            "file_references": file_refs
         })
 
-    return Response(results, status=status.HTTP_200_OK)
+    paginate = request.GET.get('paginate') == 'true' or 'page' in request.GET
+    if paginate:
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 10))
+        total_count = len(results)
+        start = (page - 1) * page_size
+        end = start + page_size
+        results_page = results[start:end]
+        return Response({
+            "count": total_count,
+            "results": results_page,
+            "page": page,
+            "page_size": page_size
+        }, status=status.HTTP_200_OK)
+    else:
+        return Response(results, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -139,6 +209,34 @@ def export_responses(request, form_id):
 
     submissions_qs = form_obj.submissions.all().order_by('-submitted_at')
 
+    # Apply same filters
+    show_archived = request.GET.get('show_archived') == 'true'
+    if not show_archived:
+        submissions_qs = submissions_qs.filter(is_archived=False)
+
+    status_param = request.GET.get('status')
+    if status_param:
+        submissions_qs = submissions_qs.filter(status=status_param)
+
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    if start_date:
+        submissions_qs = submissions_qs.filter(submitted_at__date__gte=start_date)
+    if end_date:
+        submissions_qs = submissions_qs.filter(submitted_at__date__lte=end_date)
+
+    search_query = request.GET.get('search')
+    if search_query:
+        submissions_qs = submissions_qs.filter(values__value__icontains=search_query).distinct()
+
+    for key, value in request.GET.items():
+        if key.startswith('field_') and key != 'field_id' and key != 'field_value' and value:
+            try:
+                fid = int(key.replace('field_', ''))
+                submissions_qs = submissions_qs.filter(values__field_id=fid, values__value__icontains=value)
+            except ValueError:
+                pass
+
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="form_{form_id}_responses.csv"'
 
@@ -160,7 +258,7 @@ def export_responses(request, form_id):
                 field_ids.append(str(sf.get("id")))
 
     # CSV Header Row
-    writer.writerow(["Response ID", "Submission Date"] + fields_headers)
+    writer.writerow(["Response ID", "Submission Date", "Status"] + fields_headers)
 
     # Write Data rows
     for s in submissions_qs:
@@ -174,6 +272,310 @@ def export_responses(request, form_id):
             if isinstance(val, list):
                 val = ", ".join(map(str, val))
             row_fields.append(val if val is not None else "")
-        writer.writerow([s.response_id, s.submitted_at.strftime('%Y-%m-%d %H:%M:%S')] + row_fields)
+        writer.writerow([s.response_id, s.submitted_at.strftime('%Y-%m-%d %H:%M:%S'), s.status] + row_fields)
 
     return response
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def export_responses_json(request, form_id):
+    form_obj = get_object_or_404(Form, id=form_id)
+    
+    user = request.user
+    if user.is_anonymous:
+        token_key = request.GET.get('token')
+        if token_key:
+            from rest_framework.authtoken.models import Token
+            try:
+                token = Token.objects.get(key=token_key)
+                user = token.user
+            except Token.DoesNotExist:
+                pass
+
+    if form_obj.owner and form_obj.owner != user:
+        return HttpResponse("Unauthorized", status=403)
+
+    submissions_qs = form_obj.submissions.all().order_by('-submitted_at')
+
+    # Apply same filters
+    show_archived = request.GET.get('show_archived') == 'true'
+    if not show_archived:
+        submissions_qs = submissions_qs.filter(is_archived=False)
+
+    status_param = request.GET.get('status')
+    if status_param:
+        submissions_qs = submissions_qs.filter(status=status_param)
+
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    if start_date:
+        submissions_qs = submissions_qs.filter(submitted_at__date__gte=start_date)
+    if end_date:
+        submissions_qs = submissions_qs.filter(submitted_at__date__lte=end_date)
+
+    search_query = request.GET.get('search')
+    if search_query:
+        submissions_qs = submissions_qs.filter(values__value__icontains=search_query).distinct()
+
+    for key, value in request.GET.items():
+        if key.startswith('field_') and key != 'field_id' and key != 'field_value' and value:
+            try:
+                fid = int(key.replace('field_', ''))
+                submissions_qs = submissions_qs.filter(values__field_id=fid, values__value__icontains=value)
+            except ValueError:
+                pass
+
+    results = []
+    fields = form_obj.fields.all().order_by('display_order')
+    field_map = {str(f.id): f.label for f in fields}
+
+    if not fields.exists() and submissions_qs.exists():
+        first_s = submissions_qs.first()
+        if first_s.form_version:
+            for sf in first_s.form_version.schema_snapshot:
+                field_map[str(sf.get("id"))] = sf.get("label")
+
+    for s in submissions_qs:
+        data = {
+            "Response ID": s.response_id,
+            "Submission Date": s.submitted_at.strftime('%Y-%m-%d %H:%M:%S'),
+            "Status": s.status
+        }
+        for val in s.values.all():
+            label = field_map.get(str(val.field_id), f"Field_{val.field_id}")
+            data[label] = val.value
+        results.append(data)
+
+    import json
+    response = HttpResponse(json.dumps(results, indent=2), content_type='application/json')
+    response['Content-Disposition'] = f'attachment; filename="form_{form_id}_responses.json"'
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_analytics(request, form_id):
+    form_obj = get_object_or_404(Form, id=form_id)
+    
+    if form_obj.owner and form_obj.owner != request.user:
+        return Response(
+            {"detail": "You do not have permission to view analytics for this form."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    completed_submissions = form_obj.submissions.filter(status='Completed', is_archived=False).count()
+    started_submissions = max(form_obj.started_count, form_obj.submissions.filter(is_archived=False).count())
+    completion_rate = round((completed_submissions / started_submissions) * 100, 2) if started_submissions > 0 else 100.0
+    
+    avg_time = form_obj.submissions.filter(status='Completed', is_archived=False, completion_time__isnull=False).aggregate(avg_time=models.Avg('completion_time'))['avg_time']
+    average_completion_time = round(avg_time, 1) if avg_time is not None else 0
+
+    field_distributions = {}
+    
+    fields = form_obj.fields.all()
+    if not fields.exists():
+        latest_version = form_obj.versions.order_by('-version').first()
+        if latest_version:
+            for sf in latest_version.schema_snapshot:
+                label = sf.get("label")
+                fid = sf.get("id")
+                ftype = sf.get("field_type")
+                if label and ftype in ('dropdown', 'checkbox', 'rating', 'radio'):
+                    dist = {}
+                    vals = ResponseValue.objects.filter(submission__form=form_obj, submission__is_archived=False, field_id=fid)
+                    for val_obj in vals:
+                        val = val_obj.value
+                        if val is not None:
+                            if isinstance(val, list):
+                                for item in val:
+                                    item_str = str(item)
+                                    dist[item_str] = dist.get(item_str, 0) + 1
+                            else:
+                                val_str = str(val)
+                                dist[val_str] = dist.get(val_str, 0) + 1
+                    field_distributions[label] = dist
+    else:
+        for f in fields:
+            if f.field_type in ('dropdown', 'checkbox', 'rating', 'radio'):
+                dist = {}
+                vals = ResponseValue.objects.filter(submission__form=form_obj, submission__is_archived=False, field_id=f.id)
+                for val_obj in vals:
+                    val = val_obj.value
+                    if val is not None:
+                        if isinstance(val, list):
+                            for item in val:
+                                item_str = str(item)
+                                dist[item_str] = dist.get(item_str, 0) + 1
+                        else:
+                            val_str = str(val)
+                            dist[val_str] = dist.get(val_str, 0) + 1
+                field_distributions[f.label] = dist
+
+    from django.db.models.functions import TruncDate
+    from django.db.models import Count
+    daily_qs = form_obj.submissions.filter(status='Completed', is_archived=False)\
+        .annotate(date=TruncDate('submitted_at'))\
+        .values('date')\
+        .annotate(count=Count('id'))\
+        .order_by('date')
+    daily_submissions = []
+    for item in daily_qs:
+        if item['date']:
+            daily_submissions.append({
+                "date": item['date'].strftime('%Y-%m-%d'),
+                "count": item['count']
+            })
+
+    return Response({
+        "total_submissions": completed_submissions,
+        "started_submissions": started_submissions,
+        "completed_submissions": completed_submissions,
+        "completion_rate": completion_rate,
+        "average_completion_time": average_completion_time,
+        "field_distributions": field_distributions,
+        "daily_submissions": daily_submissions
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def bulk_delete_responses(request, form_id):
+    form_obj = get_object_or_404(Form, id=form_id)
+    if form_obj.owner and form_obj.owner != request.user:
+        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+        
+    submission_ids = request.data.get('submission_ids', [])
+    if not submission_ids:
+        return Response({"detail": "No submissions selected"}, status=status.HTTP_400_BAD_REQUEST)
+        
+    submissions_to_delete = Submission.objects.filter(form=form_obj, id__in=submission_ids)
+    deleted_count = submissions_to_delete.count()
+    submissions_to_delete.delete()
+    
+    from .models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action="bulk_delete_responses",
+        target=form_obj.title,
+        context={"count": deleted_count, "submission_ids": submission_ids}
+    )
+    
+    return Response({"deleted_count": deleted_count}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def duplicate_form(request, form_id):
+    form_obj = get_object_or_404(Form, id=form_id)
+    if form_obj.owner and form_obj.owner != request.user:
+        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+        
+    import secrets
+    while True:
+        slug = secrets.token_urlsafe(8).lower().replace("_", "-").replace("~", "-")
+        if not Form.objects.filter(share_slug=slug).exists():
+            break
+
+    new_form = Form.objects.create(
+        owner=request.user,
+        title=f"Copy of {form_obj.title}",
+        description=form_obj.description,
+        status='Draft',
+        current_version=1,
+        share_slug=slug,
+        retention_days=form_obj.retention_days
+    )
+
+    field_mapping = {}
+    for original_field in form_obj.fields.all():
+        new_field = Field.objects.create(
+            form=new_form,
+            label=original_field.label,
+            field_type=original_field.field_type,
+            required=original_field.required,
+            placeholder=original_field.placeholder,
+            options=original_field.options,
+            validation_rules=original_field.validation_rules,
+            display_order=original_field.display_order
+        )
+        field_mapping[original_field.id] = new_field
+
+    for original_rule in form_obj.conditional_rules.all():
+        new_trigger = field_mapping.get(original_rule.trigger_field_id)
+        new_target = field_mapping.get(original_rule.target_field_id)
+        if new_trigger and new_target:
+            from .models import ConditionalRule
+            ConditionalRule.objects.create(
+                form=new_form,
+                trigger_field=new_trigger,
+                operator=original_rule.operator,
+                comparison_value=original_rule.comparison_value,
+                target_field=new_target,
+                action=original_rule.action
+            )
+
+    from .models import AuditLog
+    AuditLog.objects.create(
+        user=request.user,
+        action="duplicate_form",
+        target=form_obj.title,
+        context={"new_form_id": new_form.id, "new_title": new_form.title}
+    )
+
+    from .serializers import FormSerializer
+    return Response(FormSerializer(new_form).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def apply_retention_policy(request, form_id):
+    form_obj = get_object_or_404(Form, id=form_id)
+    if form_obj.owner and form_obj.owner != request.user:
+        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+        
+    retention_days = request.data.get('retention_days')
+    if retention_days is not None:
+        try:
+            form_obj.retention_days = int(retention_days) if retention_days != "" else None
+            form_obj.save(update_fields=['retention_days'])
+        except ValueError:
+            return Response({"detail": "Invalid retention days"}, status=status.HTTP_400_BAD_REQUEST)
+
+    archived_count = 0
+    if form_obj.retention_days is not None:
+        from django.utils import timezone
+        cutoff_date = timezone.now() - timezone.timedelta(days=form_obj.retention_days)
+        archived_count = form_obj.submissions.filter(submitted_at__lt=cutoff_date, is_archived=False).update(is_archived=True)
+        
+        from .models import AuditLog
+        AuditLog.objects.create(
+            user=request.user,
+            action="apply_retention_policy",
+            target=form_obj.title,
+            context={"archived_count": archived_count, "retention_days": form_obj.retention_days}
+        )
+
+    return Response({
+        "message": f"Retention policy applied. {archived_count} submissions archived.",
+        "retention_days": form_obj.retention_days,
+        "archived_count": archived_count
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_audit_logs(request):
+    from .models import AuditLog
+    logs = AuditLog.objects.filter(user=request.user).order_by('-timestamp')
+    results = []
+    for l in logs:
+        results.append({
+            "id": l.id,
+            "action": l.action,
+            "target": l.target,
+            "timestamp": l.timestamp,
+            "context": l.context,
+            "username": l.user.username if l.user else "System"
+        })
+    return Response(results, status=status.HTTP_200_OK)
