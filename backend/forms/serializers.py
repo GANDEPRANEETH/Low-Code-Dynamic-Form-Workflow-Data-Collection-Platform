@@ -6,7 +6,7 @@ from .models import Form, Field, FormVersion, Response
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email']
+        fields = ['id', 'username', 'email', 'first_name']
 
 class FieldSerializer(serializers.ModelSerializer):
     form_id = serializers.IntegerField(write_only=True, required=False)
@@ -33,7 +33,7 @@ class FormSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'owner', 'title', 'description', 'status', 
             'current_version', 'share_slug', 'created_at', 'updated_at', 'fields',
-            'started_count', 'retention_days'
+            'started_count', 'retention_days', 'publish_at', 'expires_at', 'max_submissions'
         ]
         read_only_fields = ['id', 'owner', 'status', 'current_version', 'share_slug', 'created_at', 'updated_at', 'started_count']
 

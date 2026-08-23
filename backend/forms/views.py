@@ -579,3 +579,139 @@ def get_audit_logs(request):
             "username": l.user.username if l.user else "System"
         })
     return Response(results, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ai_generate(request):
+    prompt = request.data.get('prompt')
+    if not prompt or not prompt.strip():
+        return Response({"detail": "Prompt is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    from .ai_service import generate_form_schema
+    try:
+        schema = generate_form_schema(prompt)
+        
+        # Create Form draft
+        import secrets
+        while True:
+            slug = secrets.token_urlsafe(8).lower().replace("_", "-").replace("~", "-")
+            if not Form.objects.filter(share_slug=slug).exists():
+                break
+        
+        form_obj = Form.objects.create(
+            owner=request.user,
+            title=schema.get("title", "AI Generated Form"),
+            description=schema.get("description", ""),
+            status='Draft',
+            share_slug=slug,
+            current_version=1
+        )
+        
+        # Create Fields
+        fields_data = schema.get("fields", [])
+        for idx, field in enumerate(fields_data):
+            Field.objects.create(
+                form=form_obj,
+                label=field.get("label", "Field"),
+                field_type=field.get("field_type", "text"),
+                required=field.get("required", False),
+                placeholder=field.get("placeholder", ""),
+                options=field.get("options", []),
+                display_order=idx
+            )
+            
+        AuditLog.objects.create(
+            user=request.user,
+            action="ai_generate",
+            target=form_obj.title,
+            context={"prompt": prompt}
+        )
+        
+        return Response(FormSerializer(form_obj).data, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response({"detail": f"AI Generation failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST', 'GET'])
+@permission_classes([IsAuthenticated])
+def one_time_tokens(request, form_id):
+    form_obj = get_object_or_404(Form, id=form_id)
+    if form_obj.owner and form_obj.owner != request.user:
+        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+        
+    from .models import OneTimeToken
+    
+    if request.method == 'POST':
+        import secrets
+        token_val = secrets.token_urlsafe(24)
+        expires_days = request.data.get('expires_days')
+        
+        expires_at = None
+        if expires_days:
+            from django.utils import timezone
+            expires_at = timezone.now() + timezone.timedelta(days=int(expires_days))
+            
+        token_obj = OneTimeToken.objects.create(
+            form=form_obj,
+            token=token_val,
+            status='Active',
+            expires_at=expires_at,
+            created_by=request.user
+        )
+        
+        AuditLog.objects.create(
+            user=request.user,
+            action="generate_one_time_token",
+            target=form_obj.title,
+            context={"token": token_val}
+        )
+        
+        return Response({
+            "token": token_obj.token,
+            "status": token_obj.status,
+            "created_at": token_obj.created_at,
+            "expires_at": token_obj.expires_at
+        }, status=status.HTTP_201_CREATED)
+        
+    elif request.method == 'GET':
+        tokens = form_obj.one_time_tokens.all().order_by('-created_at')
+        results = []
+        for t in tokens:
+            if t.status == 'Active' and t.expires_at:
+                from django.utils import timezone
+                if timezone.now() > t.expires_at:
+                    t.status = 'Expired'
+                    t.save(update_fields=['status'])
+            results.append({
+                "token": t.token,
+                "status": t.status,
+                "created_at": t.created_at,
+                "expires_at": t.expires_at,
+                "used_at": t.used_at
+            })
+        return Response(results, status=status.HTTP_200_OK)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def revoke_one_time_token(request, form_id, token):
+    form_obj = get_object_or_404(Form, id=form_id)
+    if form_obj.owner and form_obj.owner != request.user:
+        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+        
+    from .models import OneTimeToken
+    token_obj = get_object_or_404(OneTimeToken, form=form_obj, token=token)
+    
+    if token_obj.status == 'Active':
+        token_obj.status = 'Revoked'
+        token_obj.save(update_fields=['status'])
+        
+        AuditLog.objects.create(
+            user=request.user,
+            action="revoke_one_time_token",
+            target=form_obj.title,
+            context={"token": token}
+        )
+        
+    return Response({"message": "Token revoked successfully."}, status=status.HTTP_200_OK)

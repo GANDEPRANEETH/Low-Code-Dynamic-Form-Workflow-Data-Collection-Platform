@@ -3,6 +3,9 @@ import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
 import Builder from "./pages/Builder";
 import Preview from "./pages/Preview";
+import Landing from "./pages/Landing";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 
 function App() {
   const [route, setRoute] = useState(getRouteFromLocation());
@@ -22,10 +25,33 @@ function App() {
 
   function getRouteFromLocation() {
     const path = window.location.pathname;
+
+    // Check one-time token link: /form/:slug/token/:token or /forms/:slug/token/:token
+    if ((path.startsWith("/form/") || path.startsWith("/forms/")) && path.includes("/token/")) {
+      const parts = path.split("/");
+      const slug = parts[2];
+      const token = parts[4];
+      return { type: "public", slug, token };
+    }
+
     if (path.startsWith("/forms/")) {
       const slug = path.split("/forms/")[1];
       return { type: "public", slug };
     }
+    if (path.startsWith("/form/")) {
+      const slug = path.split("/form/")[1];
+      return { type: "public", slug };
+    }
+    if (path === "/landing") {
+      return { type: "landing" };
+    }
+    if (path === "/login") {
+      return { type: "login" };
+    }
+    if (path === "/register") {
+      return { type: "register" };
+    }
+
     const hash = window.location.hash;
     if (hash.startsWith("#/builder/")) {
       const id = hash.split("#/builder/")[1];
@@ -35,7 +61,13 @@ function App() {
       const slug = hash.split("#/preview/")[1];
       return { type: "preview", slug };
     }
-    return { type: "home" };
+
+    const token = localStorage.getItem("token");
+    if (token) {
+      return { type: "home" };
+    } else {
+      return { type: "landing" };
+    }
   }
 
   const showToast = (message, type = "success") => {
@@ -47,13 +79,44 @@ function App() {
 
   const handleBackToDashboard = () => {
     window.location.hash = "";
+    window.location.pathname = "/";
   };
 
-  // If public responder URL is active, bypass standard admin navbar
+  // Standalone pages
+  if (route.type === "landing") {
+    return <Landing />;
+  }
+
+  if (route.type === "login") {
+    return (
+      <div className="fade-in">
+        <Login showToast={showToast} />
+        {toast && (
+          <div className="toast" style={{ borderLeftColor: toast.type === "error" ? "var(--danger)" : "var(--primary)" }}>
+            {toast.message}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (route.type === "register") {
+    return (
+      <div className="fade-in">
+        <Register showToast={showToast} />
+        {toast && (
+          <div className="toast" style={{ borderLeftColor: toast.type === "error" ? "var(--danger)" : "var(--primary)" }}>
+            {toast.message}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (route.type === "public") {
     return (
       <div className="fade-in">
-        <Preview shareSlug={route.slug} isPublicOnly={true} showToast={showToast} />
+        <Preview shareSlug={route.slug} oneTimeToken={route.token} isPublicOnly={true} showToast={showToast} />
         {toast && (
           <div className="toast" style={{ borderLeftColor: toast.type === "error" ? "var(--danger)" : "var(--primary)" }}>
             {toast.message}

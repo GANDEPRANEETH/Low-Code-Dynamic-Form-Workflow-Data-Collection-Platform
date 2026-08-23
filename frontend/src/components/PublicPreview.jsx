@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { Star, FileUp, Globe, CheckCircle, ArrowLeft, Loader, Check } from "lucide-react";
+import { jsPDF } from "jspdf";
 import "../styles/preview.css";
 import "../styles/form.css";
 
@@ -86,7 +87,7 @@ function getFieldStates(fields, rules, responses) {
   return states;
 }
 
-function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
+function PublicPreview({ shareSlug, oneTimeToken = null, isPublicOnly = false, onBack, showToast }) {
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -96,6 +97,11 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
   const [responseId, setResponseId] = useState("");
   const [loadedSuccessfully, setLoadedSuccessfully] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
+
+  // Connection and Review States
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncing, setSyncing] = useState(false);
+  const [reviewMode, setReviewMode] = useState(false);
 
   // File states
   const [uploadingField, setUploadingField] = useState({});
@@ -107,12 +113,74 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
     fetchPublicForm();
   }, [shareSlug]);
 
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncPendingSubmissions();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [shareSlug]);
+
+  const syncPendingSubmissions = async () => {
+    const queue = JSON.parse(localStorage.getItem("pending_submissions") || "[]");
+    if (queue.length === 0) return;
+
+    setSyncing(true);
+    const remaining = [];
+    for (const sub of queue) {
+      try {
+        await api.submitResponse(sub.shareSlug, sub.data, sub.responseId, sub.token);
+        showToast("✓ Submission synced successfully.");
+      } catch (err) {
+        console.error("Failed to sync submission:", err);
+        if (err.status === 400 || err.message?.includes("already") || err.message?.includes("invalid")) {
+          // Discard invalid/expired
+        } else {
+          remaining.push(sub);
+        }
+      }
+    }
+    localStorage.setItem("pending_submissions", JSON.stringify(remaining));
+    setSyncing(false);
+  };
+
+  // Save response draft state on change
+  useEffect(() => {
+    if (form && Object.keys(responses).length > 0) {
+      localStorage.setItem(`form_draft_${shareSlug}`, JSON.stringify(responses));
+    }
+  }, [responses, form]);
+
   const fetchPublicForm = async () => {
     try {
       setLoading(true);
       setError(null);
       setValidationErrors({});
-      const data = await api.getPublicForm(shareSlug);
+      
+      let data;
+      if (navigator.onLine) {
+        data = await api.getPublicForm(shareSlug, oneTimeToken);
+        localStorage.setItem(`form_schema_${shareSlug}`, JSON.stringify(data));
+      } else {
+        const cached = localStorage.getItem(`form_schema_${shareSlug}`);
+        if (cached) {
+          data = JSON.parse(cached);
+          showToast("Loaded form from offline cache.", "info");
+        } else {
+          throw new Error("Internet is unavailable and this form has not been cached on this device yet.");
+        }
+      }
+
       setForm(data);
       setLoadedSuccessfully(true);
 
@@ -127,7 +195,19 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
           initialResponses[field.id] = "";
         }
       });
-      setResponses(initialResponses);
+
+      // Load draft if exists
+      const cachedDraft = localStorage.getItem(`form_draft_${shareSlug}`);
+      if (cachedDraft) {
+        try {
+          const parsed = JSON.parse(cachedDraft);
+          setResponses({ ...initialResponses, ...parsed });
+        } catch (e) {
+          setResponses(initialResponses);
+        }
+      } else {
+        setResponses(initialResponses);
+      }
     } catch (err) {
       setError(err.message || "Failed to load public form schema");
     } finally {
@@ -291,7 +371,10 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
       return;
     }
 
-    // Filter submitted data to only include visible fields
+    setReviewMode(true);
+  };
+
+  const handleConfirmSubmit = async () => {
     const visibleData = {};
     form.fields.forEach(field => {
       const state = fieldStates[field.id];
@@ -300,22 +383,159 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
       }
     });
 
+    if (!navigator.onLine) {
+      const offlineId = "OFFLINE-" + Math.random().toString(36).substr(2, 9).toUpperCase();
+      const newSub = {
+        shareSlug,
+        data: visibleData,
+        responseId: offlineId,
+        token: oneTimeToken
+      };
+      
+      const queue = JSON.parse(localStorage.getItem("pending_submissions") || "[]");
+      queue.push(newSub);
+      localStorage.setItem("pending_submissions", JSON.stringify(queue));
+      
+      localStorage.removeItem(`form_draft_${shareSlug}`);
+      
+      setResponseId(offlineId);
+      setSubmitted(true);
+      setReviewMode(false);
+      showToast("Offline mode: response saved locally.");
+      return;
+    }
+
     try {
       setSubmitting(true);
       setValidationErrors({});
-      const res = await api.submitResponse(shareSlug, visibleData);
+      const res = await api.submitResponse(shareSlug, visibleData, form.response_id, oneTimeToken);
+      
+      localStorage.removeItem(`form_draft_${shareSlug}`);
+      
       setResponseId(res.response_id);
       setSubmitted(true);
+      setReviewMode(false);
       showToast("Responses submitted successfully!");
     } catch (err) {
       if (err.errors) {
         setValidationErrors(err.errors);
+        setReviewMode(false);
         showToast("Server validation failed. Please review field inputs.", "error");
       } else {
         showToast(err.message || "Failed to submit responses. Please check network connection.", "error");
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDownloadPDF = () => {
+    try {
+      const doc = new jsPDF();
+      let y = 20;
+      const marginX = 15;
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      
+      const checkPageOverflow = (neededHeight) => {
+        if (y + neededHeight > pageHeight - 20) {
+          doc.addPage();
+          y = 20;
+        }
+      };
+
+      // Header block
+      doc.setFont("Helvetica", "bold");
+      doc.setFontSize(22);
+      doc.setTextColor(99, 102, 241); // Indigo Primary
+      doc.text("FORMFLOW STUDIO", marginX, y);
+      y += 8;
+
+      doc.setFont("Helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(148, 163, 184); // Muted grey
+      doc.text("Completed Form Response Record", marginX, y);
+      y += 6;
+
+      // Divider line
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.5);
+      doc.line(marginX, y, pageWidth - marginX, y);
+      y += 10;
+
+      // Form details
+      doc.setFont("Helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42); // Dark slate
+      const titleLines = doc.splitTextToSize(`Form: ${form.title}`, pageWidth - marginX * 2);
+      doc.text(titleLines, marginX, y);
+      y += (titleLines.length * 6) + 2;
+
+      // Timestamp
+      doc.setFont("Helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      const nowStr = new Date().toLocaleString();
+      doc.text(`Generated: ${nowStr}`, marginX, y);
+      y += 12;
+
+      // Divider
+      doc.line(marginX, y, pageWidth - marginX, y);
+      y += 12;
+
+      // Render fields
+      form.fields.forEach((field) => {
+        const state = fieldStates[field.id];
+        if (!state || !state.visible) return;
+
+        let displayVal = responses[field.id];
+        if (displayVal === undefined || displayVal === null || displayVal === "" || (Array.isArray(displayVal) && displayVal.length === 0)) {
+          displayVal = "Not answered";
+        } else if (field.field_type === "file") {
+          const fileName = fileNames[field.id] || displayVal.split('/').pop();
+          displayVal = `Attachment: ${fileName}`;
+        } else if (Array.isArray(displayVal)) {
+          displayVal = displayVal.join(", ");
+        } else {
+          displayVal = String(displayVal);
+        }
+
+        const labelLines = doc.splitTextToSize(field.label, pageWidth - marginX * 2);
+        const valueLines = doc.splitTextToSize(displayVal, pageWidth - marginX * 2);
+        
+        const blockHeight = (labelLines.length * 5) + (valueLines.length * 5) + 8;
+        checkPageOverflow(blockHeight);
+
+        // Label
+        doc.setFont("Helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(100, 116, 139);
+        doc.text(labelLines, marginX, y);
+        y += (labelLines.length * 5) + 1;
+
+        // Value
+        doc.setFont("Helvetica", "normal");
+        doc.setFontSize(11);
+        doc.setTextColor(15, 23, 42);
+        doc.text(valueLines, marginX, y);
+        y += (valueLines.length * 5) + 8;
+      });
+
+      // Footer
+      checkPageOverflow(15);
+      doc.setDrawColor(226, 232, 240);
+      doc.line(marginX, y, pageWidth - marginX, y);
+      y += 8;
+      doc.setFont("Helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text("Generated securely by FormFlow Studio Engine", marginX, y);
+
+      doc.save(`FormFlow_Response_${form.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
+      showToast("PDF response document downloaded successfully!");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to generate PDF document", "error");
     }
   };
 
@@ -386,6 +606,91 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
     );
   }
 
+  if (reviewMode) {
+    return (
+      <div className="preview-wrapper fade-in">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+          <button className="btn btn-secondary" onClick={() => setReviewMode(false)}>
+            <ArrowLeft size={16} /> Edit Answers
+          </button>
+          
+          <div className="badge badge-published" style={{ display: "inline-flex", gap: "0.25rem", padding: "0.4rem 0.8rem", textTransform: "none" }}>
+            Reviewing Your Answers
+          </div>
+        </div>
+
+        <div className="glass-card" style={{ padding: "2rem" }}>
+          <div className="preview-header" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "1.5rem", marginBottom: "1.5rem" }}>
+            <span className="preview-header-version">Review Submission</span>
+            <h2>{form.title}</h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Please verify your entries before confirming submission.</p>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", marginBottom: "2rem" }}>
+            {form.fields.map((field) => {
+              const state = fieldStates[field.id];
+              if (!state || !state.visible) return null;
+
+              let displayVal = responses[field.id];
+              if (displayVal === undefined || displayVal === null || displayVal === "" || (Array.isArray(displayVal) && displayVal.length === 0)) {
+                displayVal = <em style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Not answered</em>;
+              } else if (field.field_type === "file") {
+                displayVal = (
+                  <a href={displayVal} target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", fontSize: "0.85rem", display: "inline-flex", gap: "0.25rem", textDecoration: "none" }}>
+                    View Uploaded File Link
+                  </a>
+                );
+              } else if (Array.isArray(displayVal)) {
+                displayVal = displayVal.join(", ");
+              }
+
+              return (
+                <div key={field.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)", paddingBottom: "0.75rem" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "0.15rem" }}>
+                    {field.label}
+                  </span>
+                  <span style={{ fontSize: "0.9rem", color: "var(--text-main)", fontWeight: 500 }}>
+                    {displayVal}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ display: "flex", gap: "1rem", flexDirection: "row", flexWrap: "wrap" }}>
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              style={{ flex: "1 1 120px" }} 
+              onClick={() => setReviewMode(false)} 
+              disabled={submitting}
+            >
+              Back to Edit
+            </button>
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              style={{ flex: "1 1 120px", borderColor: "rgba(34, 211, 238, 0.25)", color: "#22D3EE" }} 
+              onClick={handleDownloadPDF} 
+              disabled={submitting}
+            >
+              Download PDF
+            </button>
+            <button 
+              type="button" 
+              className="btn btn-primary" 
+              style={{ flex: "2 1 200px" }} 
+              onClick={handleConfirmSubmit} 
+              disabled={submitting}
+            >
+              {submitting ? "Submitting..." : "Confirm & Submit"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="preview-wrapper fade-in">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
@@ -397,11 +702,25 @@ function PublicPreview({ shareSlug, isPublicOnly = false, onBack, showToast }) {
           <div></div>
         )}
         
-        {loadedSuccessfully && (
-          <div className="badge badge-published" style={{ display: "inline-flex", gap: "0.25rem", padding: "0.4rem 0.8rem", textTransform: "none" }}>
-            <Check size={12} /> Form Loaded Successfully
-          </div>
-        )}
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          {isOnline ? (
+            <div className="badge badge-published" style={{ display: "inline-flex", gap: "0.25rem", padding: "0.4rem 0.8rem", textTransform: "none", background: "rgba(16, 185, 129, 0.12)", color: "var(--success)" }}>
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--success)", alignSelf: "center", marginRight: "0.2rem" }} />
+              {syncing ? "Online — Syncing..." : "Online"}
+            </div>
+          ) : (
+            <div className="badge badge-archived" style={{ display: "inline-flex", gap: "0.25rem", padding: "0.4rem 0.8rem", textTransform: "none" }}>
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--danger)", alignSelf: "center", marginRight: "0.2rem" }} />
+              Offline — progress saved locally
+            </div>
+          )}
+          
+          {loadedSuccessfully && (
+            <div className="badge badge-published" style={{ display: "inline-flex", gap: "0.25rem", padding: "0.4rem 0.8rem", textTransform: "none" }}>
+              <Check size={12} /> Loaded Successfully
+            </div>
+          )}
+        </div>
       </div>
 
       <form className="glass-card" onSubmit={handleSubmit}>

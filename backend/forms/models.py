@@ -18,6 +18,9 @@ class Form(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     started_count = models.IntegerField(default=0)
     retention_days = models.IntegerField(null=True, blank=True)
+    publish_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    max_submissions = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return self.title
@@ -115,3 +118,21 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"{self.user.username if self.user else 'System'} - {self.action} on {self.target} at {self.timestamp}"
+
+class OneTimeToken(models.Model):
+    STATUS_CHOICES = [
+        ('Active', 'Active'),
+        ('Used', 'Used'),
+        ('Expired', 'Expired'),
+        ('Revoked', 'Revoked'),
+    ]
+    form = models.ForeignKey(Form, related_name='one_time_tokens', on_delete=models.CASCADE)
+    token = models.CharField(max_length=100, unique=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def __str__(self):
+        return f"Token {self.token} for {self.form.title} ({self.status})"

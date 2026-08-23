@@ -103,8 +103,16 @@ export const api = {
   getAuditLogs: () => request("/api/audit-logs"),
 
   // Public Client
-  getPublicForm: (slug) => request(`/api/public/${slug}`),
-  submitResponse: (slug, data) => request(`/api/public/${slug}/submit`, { method: "POST", body: JSON.stringify({ submitted_data: data }) }),
+  getPublicForm: (slug, token = null) => {
+    const query = token ? `?token=${encodeURIComponent(token)}` : "";
+    return request(`/api/public/${slug}${query}`);
+  },
+  submitResponse: (slug, data, responseId = null, token = null) => {
+    const body = { submitted_data: data };
+    if (responseId) body.response_id = responseId;
+    if (token) body.token = token;
+    return request(`/api/public/${slug}/submit`, { method: "POST", body: JSON.stringify(body) });
+  },
   
   // Direct file upload using native fetch (since request uses JSON content-type)
   uploadFile: (file) => {
@@ -121,5 +129,14 @@ export const api = {
       }
       return res.json();
     });
-  }
+  },
+
+  // AI and One-Time Token Additions
+  aiGenerate: (prompt) => request("/api/forms/ai-generate", { method: "POST", body: JSON.stringify({ prompt }) }),
+  getOneTimeTokens: (formId) => request(`/api/forms/${formId}/one-time-tokens`),
+  createOneTimeToken: (formId, expiresDays = null) => request(`/api/forms/${formId}/one-time-tokens`, {
+    method: "POST",
+    body: JSON.stringify({ expires_days: expiresDays })
+  }),
+  revokeOneTimeToken: (formId, token) => request(`/api/forms/${formId}/one-time-tokens/${token}`, { method: "DELETE" })
 };

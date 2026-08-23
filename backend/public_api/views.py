@@ -119,6 +119,54 @@ def get_public_form(request, share_slug):
             status=status.HTTP_403_FORBIDDEN
         )
 
+    from django.utils import timezone
+    now = timezone.now()
+
+    # 1. Scheduled Publish Check
+    if form_obj.publish_at and now < form_obj.publish_at:
+        formatted_time = form_obj.publish_at.strftime('%d %B %Y at %I:%M %p')
+        return Response(
+            {"detail": f"This form will be available on {formatted_time}."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # 2. Expiration Date Check
+    if form_obj.expires_at and now > form_obj.expires_at:
+        return Response(
+            {"detail": "This form is no longer accepting responses."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # 3. Max Submissions Count Check
+    if form_obj.max_submissions is not None:
+        completed_count = form_obj.submissions.filter(status='Completed').count()
+        if completed_count >= form_obj.max_submissions:
+            return Response(
+                {"detail": "This form is no longer accepting responses."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+    # 4. One-Time Submission Token Check
+    token_param = request.GET.get('token')
+    if token_param:
+        from forms.models import OneTimeToken
+        try:
+            token_obj = OneTimeToken.objects.get(form=form_obj, token=token_param)
+            if token_obj.status == 'Active' and token_obj.expires_at and now > token_obj.expires_at:
+                token_obj.status = 'Expired'
+                token_obj.save(update_fields=['status'])
+                
+            if token_obj.status != 'Active':
+                return Response(
+                    {"detail": f"This submission link has already been used or is {token_obj.status.lower()}."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        except OneTimeToken.DoesNotExist:
+            return Response(
+                {"detail": "This submission link is invalid."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
     # Fetch latest version snapshot
     latest_version = FormVersion.objects.filter(form=form_obj).order_by('-version').first()
     if not latest_version:
@@ -169,6 +217,55 @@ def submit_response(request, share_slug):
             {"detail": "Submissions are only allowed on published forms."},
             status=status.HTTP_403_FORBIDDEN
         )
+
+    from django.utils import timezone
+    now = timezone.now()
+
+    # 1. Scheduled publish check
+    if form_obj.publish_at and now < form_obj.publish_at:
+        formatted_time = form_obj.publish_at.strftime('%d %B %Y at %I:%M %p')
+        return Response(
+            {"detail": f"This form will be available on {formatted_time}."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # 2. Expiration Date Check
+    if form_obj.expires_at and now > form_obj.expires_at:
+        return Response(
+            {"detail": "This form is no longer accepting responses."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # 3. Max Submissions Check
+    if form_obj.max_submissions is not None:
+        completed_count = form_obj.submissions.filter(status='Completed').count()
+        if completed_count >= form_obj.max_submissions:
+            return Response(
+                {"detail": "This form is no longer accepting responses."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+    # 4. Validate One-Time Submission Token
+    token_param = request.data.get('token') or request.GET.get('token')
+    token_obj = None
+    if token_param:
+        from forms.models import OneTimeToken
+        try:
+            token_obj = OneTimeToken.objects.get(form=form_obj, token=token_param)
+            if token_obj.status == 'Active' and token_obj.expires_at and now > token_obj.expires_at:
+                token_obj.status = 'Expired'
+                token_obj.save(update_fields=['status'])
+                
+            if token_obj.status != 'Active':
+                return Response(
+                    {"detail": f"This submission link has already been used or is {token_obj.status.lower()}."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        except OneTimeToken.DoesNotExist:
+            return Response(
+                {"detail": "This submission link is invalid."},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
     latest_version = FormVersion.objects.filter(form=form_obj).order_by('-version').first()
     if not latest_version:
@@ -278,6 +375,16 @@ def submit_response(request, share_slug):
         return Response({"success": False, "errors": errors}, status=status.HTTP_400_BAD_REQUEST)
 
     client_response_id = request.data.get('response_id')
+    
+    # 1. Duplicate submission protection
+    if client_response_id:
+        existing_sub = Submission.objects.filter(response_id=client_response_id, status='Completed').first()
+        if existing_sub:
+            return Response({
+                "response_id": client_response_id,
+                "message": "Submitted Successfully"
+            }, status=status.HTTP_201_CREATED)
+
     submission = None
     if client_response_id:
         submission = Submission.objects.filter(response_id=client_response_id, status='Started').first()
@@ -340,6 +447,20 @@ def submit_response(request, share_slug):
                 form_version=latest_version,
                 submitted_data=submitted_data
             )
+            
+            # Mark one-time token as Used if valid
+            if token_obj:
+                token_obj.status = 'Used'
+                token_obj.used_at = timezone.now()
+                token_obj.save(update_fields=['status', 'used_at'])
+                
+                from forms.models import AuditLog
+                AuditLog.objects.create(
+                    user=None,
+                    action="one_time_token_submitted",
+                    target=form_obj.title,
+                    context={"token": token_obj.token, "response_id": resp_id}
+                )
             
             return Response({
                 "response_id": resp_id,

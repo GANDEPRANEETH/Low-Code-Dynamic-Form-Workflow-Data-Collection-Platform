@@ -27,6 +27,9 @@ urlpatterns = [
     path('api/forms/<int:pk>', forms_views.FormViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'})),
     
     # Form Submissions and Export
+    path('api/forms/ai-generate', forms_views.ai_generate),
+    path('api/forms/<int:form_id>/one-time-tokens', forms_views.one_time_tokens),
+    path('api/forms/<int:form_id>/one-time-tokens/<str:token>', forms_views.revoke_one_time_token),
     path('api/forms/<int:form_id>/responses', forms_views.get_responses),
     path('api/forms/<int:form_id>/responses/bulk-delete', forms_views.bulk_delete_responses),
     path('api/forms/<int:form_id>/export', forms_views.export_responses),
