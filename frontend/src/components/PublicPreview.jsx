@@ -298,6 +298,37 @@ function PublicPreview({ shareSlug, oneTimeToken = null, isPublicOnly = false, o
 
     const rules = field.validation_rules || {};
 
+    const isPhoneField = (f) => {
+      if (!f) return false;
+      const labelLower = (f.label || "").toLowerCase();
+      const typeLower = (f.field_type || "").toLowerCase();
+      return (
+        typeLower === "tel" || 
+        typeLower === "phone" || 
+        typeLower === "mobile" ||
+        labelLower.includes("phone") || 
+        labelLower.includes("mobile") || 
+        labelLower.includes("tel") || 
+        labelLower.includes("contact")
+      );
+    };
+
+    if (isPhoneField(field)) {
+      const valStr = String(val);
+      const len = valStr.length;
+      
+      const minLen = rules.min_value !== undefined && rules.min_value !== null && rules.min_value !== "" ? Number(rules.min_value) : (rules.min_length !== undefined && rules.min_length !== null && rules.min_length !== "" ? Number(rules.min_length) : null);
+      const maxLen = rules.max_value !== undefined && rules.max_value !== null && rules.max_value !== "" ? Number(rules.max_value) : (rules.max_length !== undefined && rules.max_length !== null && rules.max_length !== "" ? Number(rules.max_length) : null);
+      
+      if (minLen !== null && len < minLen) {
+        return `Mobile number must be at least ${minLen} digits.`;
+      }
+      if (maxLen !== null && len > maxLen) {
+        return `Mobile number cannot exceed ${maxLen} digits.`;
+      }
+      return null;
+    }
+
     if (field.field_type === "email") {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(String(val))) {
@@ -329,11 +360,14 @@ function PublicPreview({ shareSlug, oneTimeToken = null, isPublicOnly = false, o
 
     if (field.field_type === "text" || field.field_type === "long_text") {
       const len = String(val).length;
-      if (rules.min_length !== undefined && rules.min_length !== null && rules.min_length !== "" && len < Number(rules.min_length)) {
-        return `Text must be at least ${rules.min_length} characters long.`;
+      const minLen = rules.min_length !== undefined && rules.min_length !== null && rules.min_length !== "" ? Number(rules.min_length) : (rules.min_value !== undefined && rules.min_value !== null && rules.min_value !== "" ? Number(rules.min_value) : null);
+      const maxLen = rules.max_length !== undefined && rules.max_length !== null && rules.max_length !== "" ? Number(rules.max_length) : (rules.max_value !== undefined && rules.max_value !== null && rules.max_value !== "" ? Number(rules.max_value) : null);
+      
+      if (minLen !== null && len < minLen) {
+        return `Text must be at least ${minLen} characters long.`;
       }
-      if (rules.max_length !== undefined && rules.max_length !== null && rules.max_length !== "" && len > Number(rules.max_length)) {
-        return `Text cannot exceed ${rules.max_length} characters.`;
+      if (maxLen !== null && len > maxLen) {
+        return `Text cannot exceed ${maxLen} characters.`;
       }
     }
 

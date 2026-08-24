@@ -411,3 +411,151 @@ class Module2TestCase(TestCase):
         self.assertIn("duplicate_form", actions)
         self.assertIn("apply_retention_policy", actions)
         self.assertIn("bulk_delete_responses", actions)
+
+
+class PhoneValidationTestCase(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(username='test_admin_phone', password='secure_password123')
+        self.client.login(username='test_admin_phone', password='secure_password123')
+
+        # Create a form
+        self.form = Form.objects.create(
+            owner=self.user,
+            title="Phone Validation Survey",
+            description="Testing phone validation constraints",
+            status="Draft",
+            current_version=1,
+            share_slug="phone-survey"
+        )
+
+        # Field 1: Mobile field (field_type=number, max_value=10, label="Mobile Number")
+        self.field_mobile = Field.objects.create(
+            form=self.form,
+            label="Mobile Number",
+            field_type="number",
+            required=False,
+            validation_rules={"max_value": 10},
+            display_order=0
+        )
+
+        # Field 2: Fixed phone field (field_type=number, min_value=10, max_value=10, label="Telephone")
+        self.field_tel = Field.objects.create(
+            form=self.form,
+            label="Telephone",
+            field_type="number",
+            required=False,
+            validation_rules={"min_value": 10, "max_value": 10},
+            display_order=1
+        )
+
+        # Field 3: Regular number field (field_type=number, min_value=1, max_value=10, label="Items Count")
+        self.field_count = Field.objects.create(
+            form=self.form,
+            label="Items Count",
+            field_type="number",
+            required=False,
+            validation_rules={"min_value": 1, "max_value": 10},
+            display_order=2
+        )
+
+        # Publish form
+        # Trigger schema snapshot save on publish
+        self.form.status = "Published"
+        self.form.save()
+        FormVersion.objects.create(
+            form=self.form,
+            version=1,
+            schema_snapshot=[
+                {
+                    "id": self.field_mobile.id,
+                    "label": self.field_mobile.label,
+                    "field_type": self.field_mobile.field_type,
+                    "required": self.field_mobile.required,
+                    "validation_rules": self.field_mobile.validation_rules
+                },
+                {
+                    "id": self.field_tel.id,
+                    "label": self.field_tel.label,
+                    "field_type": self.field_tel.field_type,
+                    "required": self.field_tel.required,
+                    "validation_rules": self.field_tel.validation_rules
+                },
+                {
+                    "id": self.field_count.id,
+                    "label": self.field_count.label,
+                    "field_type": self.field_count.field_type,
+                    "required": self.field_count.required,
+                    "validation_rules": self.field_count.validation_rules
+                }
+            ]
+        )
+
+    def test_mobile_number_validation(self):
+        # Test valid inputs (should succeed, status 201)
+        valid_inputs = ["12345678", "123456789", "1234567890", "0123456789"]
+        for inp in valid_inputs:
+            payload = {
+                "submitted_data": {
+                    str(self.field_mobile.id): inp
+                }
+            }
+            response = self.client.post('/api/public/phone-survey/submit', payload, content_type='application/json')
+            self.assertEqual(response.status_code, 201, f"Failed for valid mobile input: {inp}")
+
+        # Test invalid input (should fail, status 400)
+        payload = {
+            "submitted_data": {
+                str(self.field_mobile.id): "12345678901"
+            }
+        }
+        response = self.client.post('/api/public/phone-survey/submit', payload, content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(str(self.field_mobile.id), response.json()["errors"])
+
+    def test_tel_number_validation(self):
+        # Test valid
+        payload = {
+            "submitted_data": {
+                str(self.field_tel.id): "1234567890"
+            }
+        }
+        response = self.client.post('/api/public/phone-survey/submit', payload, content_type='application/json')
+        self.assertEqual(response.status_code, 201)
+
+        # Test invalid too short
+        payload = {
+            "submitted_data": {
+                str(self.field_tel.id): "123456789"
+            }
+        }
+        response = self.client.post('/api/public/phone-survey/submit', payload, content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+
+        # Test invalid too long
+        payload = {
+            "submitted_data": {
+                str(self.field_tel.id): "12345678901"
+            }
+        }
+        response = self.client.post('/api/public/phone-survey/submit', payload, content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_regular_numeric_validation(self):
+        for inp in [1, 10, "1", "10"]:
+            payload = {
+                "submitted_data": {
+                    str(self.field_count.id): inp
+                }
+            }
+            response = self.client.post('/api/public/phone-survey/submit', payload, content_type='application/json')
+            self.assertEqual(response.status_code, 201, f"Failed for valid numeric input: {inp}")
+
+        for inp in [0, 11, "0", "11"]:
+            payload = {
+                "submitted_data": {
+                    str(self.field_count.id): inp
+                }
+            }
+            response = self.client.post('/api/public/phone-survey/submit', payload, content_type='application/json')
+            self.assertEqual(response.status_code, 400, f"Allowed invalid numeric input: {inp}")

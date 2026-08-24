@@ -310,6 +310,42 @@ def submit_response(request, share_slug):
             
         # 3. Type validations
         validation_rules = f.get('validation_rules') or {}
+
+        # Phone / Mobile validation check by digit/characters length
+        def is_phone_field(f_dict):
+            label = (f_dict.get('label') or '').lower()
+            ftype_val = (f_dict.get('field_type') or '').lower()
+            return (
+                ftype_val in ('tel', 'phone', 'mobile') or
+                'phone' in label or
+                'mobile' in label or
+                'tel' in label or
+                'contact' in label
+            )
+
+        if is_phone_field(f):
+            val_str = str(val)
+            val_len = len(val_str)
+            min_len = validation_rules.get('min_value')
+            if min_len is None or min_len == "":
+                min_len = validation_rules.get('min_length')
+            max_len = validation_rules.get('max_value')
+            if max_len is None or max_len == "":
+                max_len = validation_rules.get('max_length')
+
+            if min_len is not None and min_len != "":
+                try:
+                    if val_len < int(min_len):
+                        errors[fid_str] = [f"Mobile number must be at least {min_len} digits."]
+                except ValueError:
+                    pass
+            if max_len is not None and max_len != "":
+                try:
+                    if val_len > int(max_len):
+                        errors[fid_str] = [f"Mobile number cannot exceed {max_len} digits."]
+                except ValueError:
+                    pass
+            continue
         
         if ftype == 'email':
             if not EMAIL_REGEX.match(str(val)):
@@ -365,11 +401,23 @@ def submit_response(request, share_slug):
         if ftype in ('text', 'long_text'):
             val_str = str(val)
             min_len = validation_rules.get('min_length')
+            if min_len is None or min_len == "":
+                min_len = validation_rules.get('min_value')
             max_len = validation_rules.get('max_length')
-            if min_len is not None and min_len != "" and len(val_str) < int(min_len):
-                errors[fid_str] = [f"Text must be at least {min_len} characters long."]
-            if max_len is not None and max_len != "" and len(val_str) > int(max_len):
-                errors[fid_str] = [f"Text cannot exceed {max_len} characters."]
+            if max_len is None or max_len == "":
+                max_len = validation_rules.get('max_value')
+            if min_len is not None and min_len != "":
+                try:
+                    if len(val_str) < int(min_len):
+                        errors[fid_str] = [f"Text must be at least {min_len} characters long."]
+                except ValueError:
+                    pass
+            if max_len is not None and max_len != "":
+                try:
+                    if len(val_str) > int(max_len):
+                        errors[fid_str] = [f"Text cannot exceed {max_len} characters."]
+                except ValueError:
+                    pass
 
     if errors:
         return Response({"success": False, "errors": errors}, status=status.HTTP_400_BAD_REQUEST)
